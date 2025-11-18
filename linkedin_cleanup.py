@@ -243,7 +243,15 @@ class LinkedInCleanup:
                 return True, "[DRY RUN] Successfully found all selectors - would remove connection"
             
             # LIVE MODE: Actually remove the connection
-            await self.human_like_click(remove_option)
+            # Use JavaScript click (most reliable for dropdown items that fail visibility checks)
+            await remove_option.evaluate("element => element.click()")
+            
+            # Wait for confirmation modal to appear
+            try:
+                await self.page.wait_for_selector('[role="dialog"], .artdeco-modal', timeout=3000)
+            except:
+                pass  # Continue even if modal selector not found
+            
             await self.random_delay(1, 2)
             
             # Find and click confirm button in modal
@@ -312,8 +320,8 @@ class LinkedInCleanup:
         urls = df["URL"].tolist()
         print(f"Found {len(urls)} connections to process.")
         
-        # Filter out already processed successful ones
-        remaining = [url for url in urls if url not in self.processed or self.processed[url].get("status") != "success"]
+        # Filter out already processed/skipped ones
+        remaining = [url for url in urls if url not in self.processed or self.processed[url].get("status") not in ("success", "skipped")]
         print(f"Remaining to process: {len(remaining)}")
         
         if not remaining:
@@ -386,22 +394,20 @@ async def main():
         help="Test mode - finds selectors but doesn't remove connections"
     )
     parser.add_argument(
-        "--test-url",
+        "--url",
         type=str,
         metavar="URL",
-        help="Test on a specific profile URL (requires --dry-run)"
+        help="Process a specific profile URL (works with or without --dry-run)"
     )
     args = parser.parse_args()
     
-    if args.test_url and not args.dry_run:
-        parser.error("--test-url requires --dry-run mode")
-    
     cleanup = LinkedInCleanup(dry_run=args.dry_run)
     
-    # Handle dry-run with test URL
-    if args.dry_run and args.test_url:
-        cleanup.print_banner("DRY RUN MODE - Testing selectors")
-        print(f"Test URL: {args.test_url}\n")
+    # Handle single profile with --url
+    if args.url:
+        mode = "DRY RUN" if args.dry_run else "LIVE"
+        cleanup.print_banner(f"{mode} MODE - Single profile")
+        print(f"URL: {args.url}\n")
         
         await cleanup.setup_browser()
         try:
@@ -409,20 +415,22 @@ async def main():
                 print("Failed to log in. Exiting.")
                 return
             
-            success, message = await cleanup.remove_connection(args.test_url)
+            success, message = await cleanup.remove_connection(args.url)
             
             result = "✓ SUCCESS" if success else "✗ FAILED"
             cleanup.print_banner(f"Result: {result}")
             print(f"Message: {message}\n")
             
-            if success:
+            if success and not args.dry_run:
+                print("Connection successfully removed! ✓")
+            elif success and args.dry_run:
                 print("All selectors working correctly! ✓")
             else:
-                print("Selectors need updating. Check the error message above.")
+                print("Failed. Check the error message above.")
         finally:
             await cleanup.browser.close()
     
-    # Normal run (or dry-run without test URL)
+    # Normal batch run
     else:
         if args.dry_run:
             cleanup.print_banner("DRY RUN MODE - Will test selectors but not remove connections")

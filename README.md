@@ -23,7 +23,7 @@ Automated tool to remove LinkedIn connections using Playwright. Processes connec
 Before running the full cleanup, test that selectors work on a single profile:
 
 ```bash
-python linkedin_cleanup.py --dry-run --test-url "https://www.linkedin.com/in/USERNAME"
+python linkedin_cleanup.py --dry-run --url "https://www.linkedin.com/in/USERNAME"
 ```
 
 This will:
@@ -87,7 +87,7 @@ You can modify these constants in `linkedin_cleanup.py`:
 
 ## Troubleshooting
 
-- **Can't find "More" button**: Run with `--dry-run --test-url` to verify selectors. If they fail, LinkedIn may have updated their UI
+- **Can't find "More" button**: Run with `--dry-run --url` to verify selectors. If they fail, LinkedIn may have updated their UI
 - **Login issues**: Delete `data/linkedin_cookies.json` and log in again
 - **Connection already removed**: The script will detect this and skip it
 - **Rate limiting**: If LinkedIn shows warnings, increase the delays in the configuration
@@ -100,5 +100,5 @@ These selectors have been tested and confirmed working with the current LinkedIn
 - **More Button**: `button.artdeco-dropdown__trigger`
 - **Remove Connection Option**: `div[role="button"][aria-label*="Remove your connection"]`
 
-**Note**: LinkedIn updates their UI periodically. If selectors stop working, run `--dry-run --test-url` to verify and check for UI changes.
+**Note**: LinkedIn updates their UI periodically. If selectors stop working, run `--dry-run --url` to verify and check for UI changes.
 
