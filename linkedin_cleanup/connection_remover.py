@@ -46,7 +46,7 @@ async def check_connection_status(client: LinkedInClient, url: str) -> str:
     """
     page = client.page
     try:
-        # Navigate to profile
+        # Navigate to profile (navigate_to already has timeout handling)
         print(f"    → Navigating to profile: {url}")
         await client.navigate_to(url)
         print("    ✓ Profile page loaded")
@@ -89,7 +89,7 @@ async def disconnect_connection(
     """
     page = client.page
     try:
-        # Navigate to profile
+        # Navigate to profile (navigate_to already has timeout handling)
         print(f"    → Navigating to profile: {url}")
         await client.navigate_to(url)
         print("    ✓ Profile page loaded")

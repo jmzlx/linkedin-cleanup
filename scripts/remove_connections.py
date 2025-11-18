@@ -14,6 +14,9 @@ from linkedin_cleanup.linkedin_client import LinkedInClient
 from linkedin_cleanup import connection_remover
 from linkedin_cleanup.db import get_pending_urls, update_connection_status, get_all_connections
 
+# Maximum time to spend on a single profile (20 seconds)
+MAX_PROFILE_TIMEOUT = 20.0
+
 
 def _print_banner(title: str):
     """Print a formatted banner."""
@@ -37,46 +40,81 @@ async def process_batch(
     success_count = 0
     failed_count = 0
     skipped_count = 0
+    consecutive_timeouts = 0
     
     for idx, url in enumerate(urls, 1):
         print(f"\n[{idx}/{len(urls)}] 🔄 Processing: {url}")
         if dry_run:
             print("    [DRY RUN MODE - will not actually remove]")
         
-        # Check connection status first
-        status = await connection_remover.check_connection_status(client, url)
         timestamp = datetime.now().isoformat()
         
-        if status == "not_connected":
-            # Already not connected, update DB and skip
-            update_connection_status(url, "not_connected", "Already not connected", timestamp)
-            skipped_count += 1
-            print(f"    ⏭ Skipping: Already not connected")
-            continue
-        elif status == "unknown":
-            # Could not determine status, mark as failed
-            update_connection_status(url, "failed", "Could not determine connection status", timestamp)
-            failed_count += 1
-            print(f"    ❌ FAILED: Could not determine connection status")
-            continue
-        elif status == "connected":
-            # Connected, proceed with disconnection
-            if dry_run:
-                print("    [DRY RUN] Would disconnect connection...")
-            success, message = await connection_remover.disconnect_connection(
-                client, url, dry_run=dry_run
+        # Wrap entire profile processing in a timeout to prevent hanging
+        async def process_single_profile():
+            # Check connection status first
+            status = await connection_remover.check_connection_status(client, url)
+            
+            if status == "not_connected":
+                # Already not connected, update DB and skip
+                update_connection_status(url, "not_connected", "Already not connected", timestamp)
+                return "skipped", "Already not connected"
+            elif status == "unknown":
+                # Could not determine status, mark as failed
+                update_connection_status(url, "failed", "Could not determine connection status", timestamp)
+                return "failed", "Could not determine connection status"
+            elif status == "connected":
+                # Connected, proceed with disconnection
+                if dry_run:
+                    print("    [DRY RUN] Would disconnect connection...")
+                success, message = await connection_remover.disconnect_connection(
+                    client, url, dry_run=dry_run
+                )
+                
+                # Update DB with result
+                db_status = "success" if success else "failed"
+                update_connection_status(url, db_status, message, timestamp)
+                
+                return db_status, message
+            else:
+                return "failed", f"Unknown status: {status}"
+        
+        try:
+            result_status, message = await asyncio.wait_for(
+                process_single_profile(),
+                timeout=MAX_PROFILE_TIMEOUT
             )
             
-            # Update DB with result
-            db_status = "success" if success else "failed"
-            update_connection_status(url, db_status, message, timestamp)
+            # Reset timeout counter on any successful result
+            consecutive_timeouts = 0
             
-            if success:
+            if result_status == "skipped":
+                skipped_count += 1
+                print(f"    ⏭ Skipping: {message}")
+            elif result_status == "success":
                 success_count += 1
                 print(f"    ✅ SUCCESS: {message}")
             else:
                 failed_count += 1
                 print(f"    ❌ FAILED: {message}")
+                
+        except asyncio.TimeoutError:
+            # Profile processing timed out - mark as failed and continue
+            consecutive_timeouts += 1
+            error_msg = f"Profile processing timeout after {MAX_PROFILE_TIMEOUT}s"
+            update_connection_status(url, "failed", error_msg, timestamp)
+            failed_count += 1
+            print(f"    ❌ TIMEOUT: {error_msg} - skipping to next profile ({consecutive_timeouts}/3)")
+            
+            # Terminate after 3 consecutive timeouts
+            if consecutive_timeouts >= 3:
+                print(f"\n⚠️  3 consecutive timeouts detected. Terminating script.")
+                return
+        except Exception as e:
+            # Unexpected error - mark as failed and continue
+            error_msg = f"Unexpected error: {str(e)}"
+            update_connection_status(url, "failed", error_msg, timestamp)
+            failed_count += 1
+            print(f"    ❌ ERROR: {error_msg} - skipping to next profile")
         
         # Delay before next connection (except for the last one)
         if idx < len(urls):
