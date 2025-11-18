@@ -23,7 +23,7 @@ Automated tool to remove LinkedIn connections using Playwright. Processes connec
 Before running the full cleanup, test that selectors work on a single profile:
 
 ```bash
-python linkedin_cleanup.py --dry-run --url "https://www.linkedin.com/in/USERNAME"
+python remove_connections.py --dry-run --url "https://www.linkedin.com/in/USERNAME"
 ```
 
 This will:
@@ -36,10 +36,10 @@ This will:
 
 ```bash
 # Dry run: Test on all connections without removing
-python linkedin_cleanup.py --dry-run
+python remove_connections.py --dry-run
 
 # Live run: Actually remove connections
-python linkedin_cleanup.py
+python remove_connections.py
 ```
 
 The script will:
@@ -65,14 +65,14 @@ The script will:
 
 ## Files
 
-- `linkedin_cleanup.py` - Main automation script with built-in dry-run mode
+- `remove_connections.py` - Main automation script with built-in dry-run mode
 - `data/linkedin_cookies.json` - Saved authentication cookies (gitignored)
 - `data/processed_connections.json` - Progress tracking (gitignored)
 - `data/output.csv` - Input file with connections to remove
 
 ## Configuration
 
-You can modify these constants in `linkedin_cleanup.py`:
+You can modify these constants in `remove_connections.py`:
 
 - `BATCH_SIZE`: Number of connections per batch (default: 10)
 - `DELAY_MIN` / `DELAY_MAX`: Random delay between actions in seconds (default: 5-10)
