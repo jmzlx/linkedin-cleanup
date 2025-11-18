@@ -79,7 +79,8 @@ class LinkedInCleanup:
             await self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
         except:
             pass  # Continue even if timeout
-        await asyncio.sleep(3)
+        # Small random delay for page content to fully render
+        await self.random_delay(1, 2)
     
     def is_logged_in(self) -> bool:
         """Check if current page indicates logged in state."""
@@ -181,34 +182,11 @@ class LinkedInCleanup:
             pass
         return None
     
-    async def find_confirm_button(self) -> Optional[object]:
-        """Find the confirm button in the removal modal."""
-        selectors = [
-            'button:has-text("Remove")',
-            'button[aria-label*="Remove"]',
-            'button[data-control-name*="remove"]',
-            '//button[contains(text(), "Remove")]',
-        ]
-        
-        for selector in selectors:
-            try:
-                button = self.page.locator(selector).first
-                if await button.is_visible(timeout=2000):
-                    # Make sure it's the confirm button, not the cancel
-                    text = await button.inner_text()
-                    if "cancel" not in text.lower() and "close" not in text.lower():
-                        return button
-            except:
-                continue
-        
-        return None
-    
     async def remove_connection(self, url: str) -> tuple[bool, str]:
         """Remove a single connection. Returns (success, message)."""
         try:
             # Navigate to profile
             await self.navigate_to(url)
-            await self.random_delay(2, 4)  # Wait for page to fully load
             
             # Find and click "More" button
             more_button = await self.find_more_button()
@@ -230,7 +208,7 @@ class LinkedInCleanup:
             if not remove_option:
                 # Try pressing Escape to close dropdown and retry
                 await self.page.keyboard.press("Escape")
-                await asyncio.sleep(1)
+                await self.random_delay(0.5, 1)
                 return False, "Could not find 'Remove connection' option"
             
             # DRY RUN MODE: Stop here and report success
@@ -242,38 +220,45 @@ class LinkedInCleanup:
                 return True, "[DRY RUN] Successfully found all selectors - would remove connection"
             
             # LIVE MODE: Actually remove the connection
-            # Scroll into view and use native Playwright click with force
+            # LinkedIn now removes connections directly without a confirmation modal
             await remove_option.scroll_into_view_if_needed()
-            await asyncio.sleep(0.3)
-            await remove_option.click(force=True)
             
-            # Wait for confirmation modal to appear
+            # Click the remove option
             try:
-                await self.page.wait_for_selector('[role="dialog"], .artdeco-modal', timeout=5000)
-            except:
-                pass  # Continue even if modal selector not found
+                await remove_option.click(force=True)
+            except Exception:
+                # Fallback to JavaScript click if regular click fails
+                await self.page.evaluate("arguments[0].click();", await remove_option.element_handle())
             
-            await self.random_delay(1, 2)
-            
-            # Find and click confirm button in modal
-            confirm_button = await self.find_confirm_button()
-            if not confirm_button:
-                return False, "Could not find confirm button in modal"
-            
-            await self.human_like_click(confirm_button)
+            # Wait for the removal to process (LinkedIn may open popups/redirects)
             await self.random_delay(2, 3)
             
-            # Verify removal (check for Connect button or success message)
-            connect_button = self.page.locator('button:has-text("Connect")').first
-            if await connect_button.is_visible(timeout=3000):
-                return True, "Successfully removed"
+            # Navigate back to the profile URL to verify removal
+            # This ensures we're on the correct page regardless of any popups/redirects
+            await self.navigate_to(url)
             
-            # Alternative check: see if "More" button is gone
+            # Verify removal by checking for Connect button (appears after disconnection)
+            connect_button = self.page.locator('button:has-text("Connect")').first
+            connect_visible = await connect_button.is_visible(timeout=3000)
+            
+            # Also check if "More" button is gone (indicates connection removed)
             more_button_after = await self.find_more_button()
+            
+            # Multiple verification checks
+            if connect_visible:
+                # Double-check: verify the Connect button is actually visible and clickable
+                try:
+                    connect_text = await connect_button.inner_text()
+                    if "Connect" in connect_text:
+                        return True, "Successfully removed (Connect button visible)"
+                except:
+                    pass
+            
             if not more_button_after:
                 return True, "Successfully removed (More button no longer visible)"
             
-            return True, "Removal completed (verification uncertain)"
+            # If neither check passed, the removal may have failed
+            return False, "Removal verification failed - Connect button not found and More button still present"
             
         except Exception as e:
             return False, f"Error: {str(e)}"
@@ -424,6 +409,9 @@ async def main():
             
             if success and not args.dry_run:
                 print("Connection successfully removed! ✓")
+                print("\nBrowser will stay open for 10 seconds so you can verify the removal.")
+                print("Check that the 'Connect' button is visible on the profile page.")
+                await asyncio.sleep(10)
             elif success and args.dry_run:
                 print("All selectors working correctly! ✓")
             else:
