@@ -55,11 +55,31 @@ class LinkedInClient:
         # Use a shorter timeout to prevent getting stuck on pages that never load
         navigation_timeout = 30000  # 30 seconds instead of 60
         try:
-            await self.page.goto(
+            response = await self.page.goto(
                 url,
                 wait_until="domcontentloaded",
                 timeout=navigation_timeout
             )
+            
+            # Check HTTP status code - terminate on non-success codes
+            if response:
+                status = response.status
+                if status >= 400:
+                    error_msg = f"HTTP {status} error when accessing {url}"
+                    if status == 403:
+                        error_msg += " - Access forbidden (may be rate limited or blocked)"
+                    elif status == 429:
+                        error_msg += " - Rate limited (too many requests)"
+                    elif status == 500:
+                        error_msg += " - Server error"
+                    elif status == 503:
+                        error_msg += " - Service unavailable"
+                    
+                    print(f"\n❌ {error_msg}")
+                    print("Terminating script to prevent further issues.")
+                    raise SystemExit(1)
+        except SystemExit:
+            raise  # Re-raise SystemExit to terminate
         except Exception as e:
             # If navigation times out, check if we're at least on the right domain
             current_url = self.page.url
