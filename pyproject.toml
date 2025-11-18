@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "linkedin-cleanup"
 version = "0.1.0"
@@ -8,4 +12,9 @@ dependencies = [
     "ipykernel>=7.1.0",
     "pandas>=2.3.3",
     "playwright>=1.40.0",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
 ]
+
+[tool.hatchling.build]
+packages = ["linkedin_cleanup"]

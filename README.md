@@ -11,7 +11,14 @@ Automated tool to remove LinkedIn connections using Playwright. Processes connec
    pip install -r requirements.txt
    ```
 
-2. **Install Playwright browsers:**
+2. **Install the package in editable mode:**
+   ```bash
+   uv pip install -e .
+   # or
+   pip install -e .
+   ```
+
+3. **Install Playwright browsers:**
    ```bash
    playwright install chromium
    ```
@@ -23,7 +30,7 @@ Automated tool to remove LinkedIn connections using Playwright. Processes connec
 Before running the full cleanup, test that selectors work on a single profile:
 
 ```bash
-python remove_connections.py --dry-run --url "https://www.linkedin.com/in/USERNAME"
+python scripts/remove_connections.py --dry-run --url "https://www.linkedin.com/in/USERNAME"
 ```
 
 This will:
@@ -36,10 +43,10 @@ This will:
 
 ```bash
 # Dry run: Test on all connections without removing
-python remove_connections.py --dry-run
+python scripts/remove_connections.py --dry-run
 
 # Live run: Actually remove connections
-python remove_connections.py
+python scripts/remove_connections.py
 ```
 
 The script will:
@@ -63,19 +70,41 @@ The script will:
 - **Error Handling**: Continues processing even if individual connections fail
 - **Resume Capability**: Skips already successfully processed connections
 
+## Project Structure
+
+```
+linkedin-cleanup/
+├── linkedin_cleanup/          # Core library package
+│   ├── __init__.py
+│   ├── config.py              # Configuration constants
+│   ├── linkedin_client.py      # Browser automation client
+│   ├── search_extractor.py     # Search result extraction utilities
+│   └── connection_remover.py   # Connection removal utilities
+├── scripts/                    # Executable scripts
+│   ├── extract_search_results.py  # Extract profiles from search results
+│   └── remove_connections.py      # Remove LinkedIn connections
+├── notebooks/                 # Jupyter notebooks
+│   └── identify_connections.ipynb
+└── data/                      # Data files
+    ├── linkedin_cookies.json      # Saved authentication cookies (gitignored)
+    ├── processed_connections.json # Progress tracking (gitignored)
+    └── output.csv                 # Input file with connections to remove
+```
+
 ## Files
 
-- `remove_connections.py` - Main automation script with built-in dry-run mode
+- `scripts/remove_connections.py` - Main automation script with built-in dry-run mode
+- `scripts/extract_search_results.py` - Extract profile URLs from LinkedIn search results
 - `data/linkedin_cookies.json` - Saved authentication cookies (gitignored)
 - `data/processed_connections.json` - Progress tracking (gitignored)
 - `data/output.csv` - Input file with connections to remove
 
 ## Configuration
 
-You can modify these constants in `remove_connections.py`:
+You can modify configuration constants in `linkedin_cleanup/config.py`:
 
 - `BATCH_SIZE`: Number of connections per batch (default: 10)
-- `DELAY_MIN` / `DELAY_MAX`: Random delay between actions in seconds (default: 5-10)
+- `REMOVAL_DELAY_MIN` / `REMOVAL_DELAY_MAX`: Random delay between actions in seconds (default: 5-10)
 - `BATCH_DELAY_MIN` / `BATCH_DELAY_MAX`: Delay between batches in seconds (default: 120-180)
 
 ## Notes
