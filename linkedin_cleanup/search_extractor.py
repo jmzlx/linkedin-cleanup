@@ -210,28 +210,18 @@ async def extract_profiles_from_page(client: LinkedInClient) -> List[Tuple[str, 
                     }
                     name = name.trim();
                     
-                    // Extract location from container text
-                    // Location appears after job title, before "Message" button
+                    // Extract location using direct DOM selector
+                    // Location is in the second subtitle element (first subtitle is job title, second is location)
                     let location = null;
-                    let containerText = container.innerText || '';
-                    let lines = containerText.split('\\n').map(l => l.trim()).filter(l => l.length > 0);
-                    
-                    for (let i = 0; i < lines.length; i++) {
-                        let line = lines[i];
-                        // Skip if it's the name, connection indicator, or action buttons
-                        if (line.includes('•') || 
-                            line.toLowerCase().includes('message') ||
-                            line.toLowerCase().includes('mutual connection') ||
-                            line.length < 3) {
-                            continue;
-                        }
-                        
-                        // Check if this looks like a location
-                        if (line.includes(',') || 
-                            /^[A-Z][a-z]+,\s*[A-Z]/.test(line) ||
-                            /^[A-Z][a-z]+\s+[A-Z][a-z]+$/.test(line)) {
-                            location = line;
-                            break;
+                    let subtitles = container.querySelectorAll('span.entity-result__primary-subtitle, div.entity-result__primary-subtitle');
+                    if (subtitles.length >= 2) {
+                        // Second subtitle element is the location
+                        location = subtitles[1].innerText.trim();
+                        // Clean up location text (remove extra whitespace, newlines)
+                        location = location.replace(/\\s+/g, ' ').trim();
+                        // If location is empty or matches the name, set to null
+                        if (!location || location === name) {
+                            location = null;
                         }
                     }
                     
