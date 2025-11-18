@@ -173,11 +173,10 @@ class LinkedInCleanup:
         """Find the 'Remove connection' option in the dropdown menu - tested and working selector."""
         selector = 'div[role="button"][aria-label*="Remove your connection"]'
         try:
-            option = self.page.locator(selector).first
+            locator = self.page.locator(selector)
             # Check if element exists (don't rely on is_visible as these may not pass visibility check)
-            count = await self.page.locator(selector).count()
-            if count > 0:
-                return option
+            if await locator.count() > 0:
+                return locator.first
         except:
             pass
         return None
