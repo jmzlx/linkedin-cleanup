@@ -127,8 +127,16 @@ async def run_cleanup(input_csv: Optional[str] = None, dry_run: bool = False):
         if url not in processed
         or processed[url].get("status") not in ("success", "skipped")
     ]
-    print(f"📋 Remaining to process: {len(remaining)}")
-    print(f"   (Skipping {len(urls) - len(remaining)} already processed)\n")
+    
+    # Limit to 5 profiles in dry-run mode
+    if dry_run and len(remaining) > 5:
+        print(f"📋 Remaining to process: {len(remaining)}")
+        print(f"   (Skipping {len(urls) - len(remaining)} already processed)")
+        print(f"   ⚠️  DRY RUN: Limiting to first 5 profiles\n")
+        remaining = remaining[:5]
+    else:
+        print(f"📋 Remaining to process: {len(remaining)}")
+        print(f"   (Skipping {len(urls) - len(remaining)} already processed)\n")
     
     if not remaining:
         print("✅ All connections have already been processed successfully!")

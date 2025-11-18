@@ -176,7 +176,7 @@ async def main():
         "--search-url",
         type=str,
         default=config.DEFAULT_SEARCH_URL,
-        help=f"LinkedIn search results URL (default: {config.DEFAULT_SEARCH_URL})"
+        help=f"LinkedIn search results URL (default: {config.DEFAULT_SEARCH_URL.replace('%', '%%')})"
     )
     parser.add_argument(
         "--output",
@@ -193,15 +193,20 @@ async def main():
         "--max-pages",
         type=int,
         default=None,
-        help="Maximum number of pages to extract (default: no limit except config.MAX_PAGES)"
+        help=f"Maximum number of pages to extract (default: no limit except config.MAX_PAGES={config.MAX_PAGES}, or 2 pages in dry-run mode)"
     )
     args = parser.parse_args()
+    
+    # In dry-run mode, default to 2 pages unless explicitly specified
+    max_pages = args.max_pages
+    if args.dry_run and max_pages is None:
+        max_pages = 2
     
     await run_extraction(
         args.search_url, 
         args.output if not args.dry_run else None,
         dry_run=args.dry_run,
-        max_pages=args.max_pages
+        max_pages=max_pages
     )
 
 
