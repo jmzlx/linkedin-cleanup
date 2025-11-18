@@ -150,6 +150,29 @@ class LinkedInClient:
     
     async def setup_browser(self):
         """Set up browser with stealth settings."""
+        # Check if browser is already running
+        if self.browser and self.browser.is_connected():
+            print("Browser already running, reusing existing instance.")
+            return
+        
+        # Clean up any existing instances before creating new ones
+        if self.browser:
+            try:
+                await self.browser.close()
+            except Exception:
+                pass
+        if self.playwright:
+            try:
+                await self.playwright.stop()
+            except Exception:
+                pass
+        
+        # Reset instance variables
+        self.playwright = None
+        self.browser = None
+        self.context = None
+        self.page = None
+        
         self.playwright = await async_playwright().start()
         
         self.browser = await self.playwright.chromium.launch(
@@ -280,7 +303,17 @@ class LinkedInClient:
     async def close(self):
         """Close browser and cleanup resources."""
         if self.browser:
-            await self.browser.close()
+            try:
+                await self.browser.close()
+            except Exception:
+                pass
+            self.browser = None
         if self.playwright:
-            await self.playwright.stop()
+            try:
+                await self.playwright.stop()
+            except Exception:
+                pass
+            self.playwright = None
+        self.context = None
+        self.page = None
 
