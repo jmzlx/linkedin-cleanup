@@ -52,14 +52,35 @@ class LinkedInClient:
     
     async def navigate_to(self, url: str):
         """Navigate to a URL with timeout handling."""
+        # Use a shorter timeout to prevent getting stuck on pages that never load
+        navigation_timeout = 30000  # 30 seconds instead of 60
         try:
             await self.page.goto(
                 url,
                 wait_until="domcontentloaded",
-                timeout=config.NAVIGATION_TIMEOUT
+                timeout=navigation_timeout
             )
-        except Exception:
+        except Exception as e:
+            # If navigation times out, check if we're at least on the right domain
+            current_url = self.page.url
+            if "linkedin.com" not in current_url:
+                print(f"  Warning: Navigation timeout, but continuing anyway...")
             pass  # Continue even if timeout
+        
+        # Wait for page to finish loading (check tab loading state)
+        # This prevents the script from getting stuck on pages that never finish loading
+        # Use Playwright's wait_for_load_state with a timeout
+        try:
+            # Wait for "load" state (DOM and resources loaded) with a timeout
+            # This handles the tab spinner issue - if the page is stuck loading,
+            # this will timeout and we'll continue anyway
+            await self.page.wait_for_load_state("load", timeout=15000)  # 15 second timeout
+        except Exception:
+            # If load times out, the page might be stuck - log and continue
+            # LinkedIn pages sometimes have continuous network activity, so we don't
+            # wait for networkidle which might never happen
+            print(f"  Warning: Page load timeout, continuing anyway...")
+        
         # Small random delay for page content to fully render
         await self.random_delay(1, 2)
     

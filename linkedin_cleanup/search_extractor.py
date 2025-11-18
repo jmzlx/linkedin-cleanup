@@ -101,14 +101,18 @@ async def extract_profiles_from_page(client: LinkedInClient) -> List[Tuple[str, 
     profiles = []
     seen_urls = set()
     
+    print("  → Verifying page type...")
     # Verify we're on a people search results page, not jobs
     try:
         current_url = page.url
         if '/search/results/people/' not in current_url:
-            print(f"Warning: URL doesn't appear to be a people search page: {current_url}")
+            print(f"  ⚠ Warning: URL doesn't appear to be a people search page: {current_url}")
+        else:
+            print("  ✓ Confirmed: People search results page")
     except Exception:
         pass
     
+    print("  → Waiting for search results to load...")
     try:
         # Wait for people search results to load (not job results)
         # Look for the specific container that indicates people search results
@@ -116,22 +120,26 @@ async def extract_profiles_from_page(client: LinkedInClient) -> List[Tuple[str, 
             'div[data-view-name="people-search-result"]',
             timeout=config.SELECTOR_TIMEOUT
         )
+        print("  ✓ Search results containers found")
     except Exception:
-        print("Warning: Could not find people search result containers. Page might not have loaded or might be showing job results.")
+        print("  ⚠ Warning: Could not find people search result containers. Page might not have loaded or might be showing job results.")
         pass
     
     # Scroll down to load all content (LinkedIn may use lazy loading)
+    print("  → Scrolling to load all content (handling lazy loading)...")
     try:
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await client.random_delay(2, 3)
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.8)")
         await client.random_delay(1, 2)
+        print("  ✓ Scrolling complete")
     except Exception:
         pass
     
     # Extract profiles using the new LinkedIn structure
     # LinkedIn search results are in: main > div[data-view-name="people-search-result"]
     # Each container has one main profile link (plus potentially mutual connection links)
+    print("  → Extracting profile data from page...")
     try:
         # Extract all profile data in one pass - more efficient and reliable
         profile_data = await page.evaluate("""
@@ -210,19 +218,16 @@ async def extract_profiles_from_page(client: LinkedInClient) -> List[Tuple[str, 
                     }
                     name = name.trim();
                     
-                    // Extract location using direct DOM selector
-                    // Location is in the second subtitle element (first subtitle is job title, second is location)
-                    let location = null;
-                    let subtitles = container.querySelectorAll('span.entity-result__primary-subtitle, div.entity-result__primary-subtitle');
-                    if (subtitles.length >= 2) {
-                        // Second subtitle element is the location
-                        location = subtitles[1].innerText.trim();
-                        // Clean up location text (remove extra whitespace, newlines)
+                    // Extract location using DOM selector
+                    // Location is in the third <p> element within the search result container
+                    // (first <p> contains name/connection, second is job title, third is location)
+                    let location = 'Unknown';
+                    let paragraphs = container.querySelectorAll('p');
+                    if (paragraphs.length >= 3) {
+                        // Third paragraph is the location
+                        location = paragraphs[2].innerText.trim();
+                        // Clean up location text
                         location = location.replace(/\\s+/g, ' ').trim();
-                        // If location is empty or matches the name, set to null
-                        if (!location || location === name) {
-                            location = null;
-                        }
                     }
                     
                     profiles.push({
@@ -239,28 +244,32 @@ async def extract_profiles_from_page(client: LinkedInClient) -> List[Tuple[str, 
         
         # Handle result structure
         if isinstance(profile_data, dict) and 'error' in profile_data:
-            print(f"Error: {profile_data['error']}")
+            print(f"  ✗ Error: {profile_data['error']}")
             if 'stats' in profile_data:
-                print(f"Stats: {profile_data['stats']}")
+                print(f"  Stats: {profile_data['stats']}")
             return profiles
         
         if isinstance(profile_data, dict) and 'profiles' in profile_data:
             stats = profile_data.get('stats', {})
-            print(f"Stats: {stats.get('totalContainers', 0)} search result containers found, "
-                  f"{stats.get('finalCount', 0)} profiles extracted")
+            total_containers = stats.get('totalContainers', 0)
+            final_count = stats.get('finalCount', 0)
+            print(f"  ✓ Found {total_containers} search result containers, extracted {final_count} profiles")
             profile_data = profile_data['profiles']
         
-        print(f"Found {len(profile_data)} search result cards on page")
+        print(f"  → Processing {len(profile_data)} search result cards...")
         
         if len(profile_data) == 0:
-            print("Warning: No search result cards found")
+            print("  ⚠ Warning: No search result cards found")
             return profiles
         
         # Process the extracted data
+        processed_count = 0
+        skipped_count = 0
         for profile in profile_data:
             try:
                 url = normalize_linkedin_url(profile['url'])
                 if not url or url in seen_urls:
+                    skipped_count += 1
                     continue
                 seen_urls.add(url)
                 
@@ -268,15 +277,22 @@ async def extract_profiles_from_page(client: LinkedInClient) -> List[Tuple[str, 
                 location = profile['location'] or "Unknown"
                 
                 profiles.append((name, url, location))
+                processed_count += 1
             except Exception as e:
-                print(f"  Error processing profile: {e}")
+                print(f"  ✗ Error processing profile: {e}")
+                skipped_count += 1
                 continue
+        
+        if skipped_count > 0:
+            print(f"  → Processed {processed_count} profiles, skipped {skipped_count} (duplicates/invalid)")
+        else:
+            print(f"  ✓ Processed {processed_count} profiles")
     
     except Exception as e:
-        print(f"Warning: Error extracting profiles: {e}")
+        print(f"  ✗ Error extracting profiles: {e}")
         return profiles
     
-    print(f"  Extracted {len(profiles)} profiles with location information")
+    print(f"  ✓ Successfully extracted {len(profiles)} unique profiles with location information")
     return profiles
 
 
@@ -289,6 +305,7 @@ async def has_next_page(client: LinkedInClient) -> bool:
     - Different button implementations across page variations
     """
     page = client.page
+    print("  → Checking for next page...")
     try:
         # Try each selector until we find an enabled Next button
         for selector in config.NEXT_BUTTON_SELECTORS:
@@ -296,11 +313,14 @@ async def has_next_page(client: LinkedInClient) -> bool:
                 next_button = page.locator(selector).first
                 if await next_button.count() > 0:
                     if await next_button.is_enabled():
+                        print("  ✓ Next page button found and enabled")
                         return True
             except Exception:
                 continue
+        print("  → No next page available")
         return False
     except Exception:
+        print("  → Could not determine if next page exists")
         return False
 
 
@@ -313,6 +333,7 @@ async def go_to_next_page(client: LinkedInClient) -> bool:
     - Different button implementations across page variations
     """
     page = client.page
+    print("  → Navigating to next page...")
     try:
         # Try each selector until we find and click an enabled Next button
         for selector in config.NEXT_BUTTON_SELECTORS:
@@ -322,15 +343,20 @@ async def go_to_next_page(client: LinkedInClient) -> bool:
                     if not await next_button.is_enabled():
                         continue
                     
+                    print("  → Scrolling to next button...")
                     await next_button.scroll_into_view_if_needed()
                     await client.random_delay(0.5, 1)
+                    print("  → Clicking next button...")
                     await next_button.click()
+                    print("  → Waiting for page to load...")
                     await client.random_delay(config.PAGE_DELAY_MIN, config.PAGE_DELAY_MAX)
+                    print("  ✓ Successfully navigated to next page")
                     return True
             except Exception:
                 continue
+        print("  ✗ Could not navigate to next page")
         return False
     except Exception as e:
-        print(f"Error navigating to next page: {e}")
+        print(f"  ✗ Error navigating to next page: {e}")
         return False
 

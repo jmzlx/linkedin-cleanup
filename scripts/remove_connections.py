@@ -49,12 +49,20 @@ async def process_batch(
     """Process a batch of connections."""
     _print_banner(f"BATCH {batch_num}/{total_batches} - Processing {len(urls)} connections")
     
+    success_count = 0
+    failed_count = 0
+    skipped_count = 0
+    
     for idx, url in enumerate(urls, 1):
         if url in processed and processed[url].get("status") == "success":
-            print(f"[{idx}/{len(urls)}] Skipping {url} (already processed)")
+            print(f"\n[{idx}/{len(urls)}] ⏭ Skipping {url}")
+            print(f"    (already processed successfully)")
+            skipped_count += 1
             continue
         
-        print(f"[{idx}/{len(urls)}] Processing: {url}")
+        print(f"\n[{idx}/{len(urls)}] 🔄 Processing: {url}")
+        if dry_run:
+            print("    [DRY RUN MODE - will not actually remove]")
         
         success, message = await connection_remover.remove_connection(
             client, url, dry_run
@@ -70,33 +78,48 @@ async def process_batch(
         _save_progress(processed)  # Save after each connection
         
         if success:
-            print(f"  ✓ {message}")
+            success_count += 1
+            print(f"    ✅ SUCCESS: {message}")
         else:
-            print(f"  ✗ {message}")
+            failed_count += 1
+            print(f"    ❌ FAILED: {message}")
         
         # Delay before next connection (except for the last one)
         if idx < len(urls):
+            delay = random.uniform(config.REMOVAL_DELAY_MIN, config.REMOVAL_DELAY_MAX)
+            print(f"    ⏳ Waiting {delay:.1f}s before next connection...")
             await client.random_delay(
                 config.REMOVAL_DELAY_MIN,
                 config.REMOVAL_DELAY_MAX
             )
     
-    print(f"\n✓ Batch {batch_num} complete!")
+    print(f"\n{'='*60}")
+    print(f"✓ Batch {batch_num} complete!")
+    print(f"  • Successful: {success_count}")
+    print(f"  • Failed: {failed_count}")
+    print(f"  • Skipped: {skipped_count}")
+    print(f"{'='*60}")
 
 
 async def run_cleanup(input_csv: Optional[str] = None, dry_run: bool = False):
     """Main execution function."""
     _print_banner("LINKEDIN CONNECTION CLEANUP")
     
+    if dry_run:
+        print("⚠️  DRY RUN MODE - No connections will actually be removed\n")
+    
     # Load connections from CSV
     csv_path = input_csv or config.OUTPUT_CSV
-    print(f"Loading connections from {csv_path}...")
+    print(f"📂 Loading connections from: {csv_path}")
     df = pd.read_csv(csv_path)
     urls = df["URL"].tolist()
-    print(f"Found {len(urls)} connections to process.")
+    print(f"✓ Found {len(urls)} total connections in CSV\n")
     
     # Load progress
+    print("📊 Loading progress from previous runs...")
     processed = _load_progress()
+    already_processed = sum(1 for v in processed.values() if v.get("status") == "success")
+    print(f"✓ Found {already_processed} already processed connections\n")
     
     # Filter out already processed/skipped ones
     remaining = [
@@ -104,26 +127,31 @@ async def run_cleanup(input_csv: Optional[str] = None, dry_run: bool = False):
         if url not in processed
         or processed[url].get("status") not in ("success", "skipped")
     ]
-    print(f"Remaining to process: {len(remaining)}")
+    print(f"📋 Remaining to process: {len(remaining)}")
+    print(f"   (Skipping {len(urls) - len(remaining)} already processed)\n")
     
     if not remaining:
-        print("\nAll connections have already been processed successfully!")
+        print("✅ All connections have already been processed successfully!")
         return
     
     client = LinkedInClient()
     
     # Setup browser
-    print("\nSetting up browser...")
+    print("🌐 Setting up browser...")
     await client.setup_browser()
+    print("✓ Browser ready\n")
     
     try:
         # Ensure logged in
+        print("🔐 Checking login status...")
         if not await client.ensure_logged_in():
-            print("Failed to log in. Exiting.")
+            print("✗ Failed to log in. Exiting.")
             return
+        print("✓ Logged in successfully\n")
         
         # Process in batches
         total_batches = math.ceil(len(remaining) / config.BATCH_SIZE)
+        print(f"📦 Processing in {total_batches} batch(es) of up to {config.BATCH_SIZE} connections each\n")
         
         for batch_num in range(1, total_batches + 1):
             start_idx = (batch_num - 1) * config.BATCH_SIZE
@@ -138,9 +166,9 @@ async def run_cleanup(input_csv: Optional[str] = None, dry_run: bool = False):
                     config.BATCH_DELAY_MIN,
                     config.BATCH_DELAY_MAX
                 )
-                print(f"\nWaiting {delay:.0f} seconds before next batch...")
+                print(f"\n⏳ Waiting {delay:.0f} seconds before next batch...")
                 await asyncio.sleep(delay)
-                print("Delay complete, continuing...")
+                print("✓ Delay complete, continuing to next batch...\n")
         
         _print_banner("ALL BATCHES COMPLETE!")
         
@@ -148,14 +176,15 @@ async def run_cleanup(input_csv: Optional[str] = None, dry_run: bool = False):
         statuses = [v.get("status") for v in processed.values()]
         successful = statuses.count("success")
         failed = statuses.count("failed")
-        print("Summary:")
-        print(f"  Successful: {successful}")
-        print(f"  Failed: {failed}")
-        print(f"  Progress saved to: {config.PROGRESS_FILE}")
+        print("📊 FINAL SUMMARY:")
+        print(f"   ✅ Successful: {successful}")
+        print(f"   ❌ Failed: {failed}")
+        print(f"   📁 Progress saved to: {config.PROGRESS_FILE}")
     
     finally:
-        print("\nClosing browser...")
+        print("\n🔒 Closing browser...")
         await client.close()
+        print("✓ Browser closed")
 
 
 async def main():
@@ -187,39 +216,49 @@ async def main():
     if args.url:
         mode = "DRY RUN" if args.dry_run else "LIVE"
         _print_banner(f"{mode} MODE - Single profile")
-        print(f"URL: {args.url}\n")
+        print(f"🔗 URL: {args.url}\n")
+        
+        if args.dry_run:
+            print("⚠️  DRY RUN MODE - Will test selectors but not remove connection\n")
         
         client = LinkedInClient()
+        print("🌐 Setting up browser...")
         await client.setup_browser()
+        print("✓ Browser ready\n")
+        
         try:
+            print("🔐 Checking login status...")
             if not await client.ensure_logged_in():
-                print("Failed to log in. Exiting.")
+                print("✗ Failed to log in. Exiting.")
                 return
+            print("✓ Logged in successfully\n")
             
+            print("🚀 Starting connection removal process...\n")
             success, message = await connection_remover.remove_connection(
                 client, args.url, args.dry_run
             )
             
-            result = "✓ SUCCESS" if success else "✗ FAILED"
+            result = "✅ SUCCESS" if success else "❌ FAILED"
             _print_banner(f"Result: {result}")
-            print(f"Message: {message}\n")
+            print(f"📝 Message: {message}\n")
             
             if success and not args.dry_run:
-                print("Connection successfully removed! ✓")
-                print("\nBrowser will stay open for 10 seconds so you can verify the removal.")
-                print("Check that the 'Connect' button is visible on the profile page.")
+                print("✅ Connection successfully removed!")
+                print("\n⏳ Browser will stay open for 10 seconds so you can verify the removal.")
+                print("   Check that the 'Connect' button is visible on the profile page.")
                 await asyncio.sleep(10)
             elif success and args.dry_run:
-                print("All selectors working correctly! ✓")
+                print("✅ All selectors working correctly!")
+                print("   The connection would be removed in LIVE mode.")
             else:
-                print("Failed. Check the error message above.")
+                print("❌ Failed. Check the error message above.")
         finally:
+            print("\n🔒 Closing browser...")
             await client.close()
+            print("✓ Browser closed")
     
     # Normal batch run
     else:
-        if args.dry_run:
-            _print_banner("DRY RUN MODE - Will test selectors but not remove connections")
         await run_cleanup(input_csv=args.input_csv, dry_run=args.dry_run)
 
 
