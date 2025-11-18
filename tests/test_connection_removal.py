@@ -8,8 +8,101 @@ from linkedin_cleanup import connection_remover
 
 
 @pytest.mark.asyncio
-async def test_remove_connection_dry_run(mock_client):
-    """Test dry run removal - identifies More and Remove connection selectors."""
+async def test_check_connection_status_connected(mock_client):
+    """Test checking connection status when connected (More button exists)."""
+    # Setup: Profile is connected (More button exists)
+    mock_more_button = AsyncMock()
+    mock_more_button.is_visible = AsyncMock(return_value=True)
+    mock_more_locator = MagicMock()
+    mock_more_locator.first = mock_more_button
+    
+    def locator_side_effect(selector):
+        if "More" in selector or "artdeco-dropdown__trigger" in selector:
+            return mock_more_locator
+        return mock_more_locator
+    
+    mock_client.page.locator.side_effect = locator_side_effect
+    
+    # Execute
+    status = await connection_remover.check_connection_status(
+        mock_client, "https://www.linkedin.com/in/test-profile"
+    )
+    
+    # Verify
+    assert status == "connected"
+    mock_client.navigate_to.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_check_connection_status_not_connected(mock_client):
+    """Test checking connection status when not connected (Connect button exists)."""
+    # Setup: Profile is not connected (More button doesn't exist, Connect button does)
+    mock_more_button = AsyncMock()
+    mock_more_button.is_visible = AsyncMock(return_value=False)
+    mock_more_locator = MagicMock()
+    mock_more_locator.first = mock_more_button
+    
+    mock_connect_button = AsyncMock()
+    mock_connect_button.is_visible = AsyncMock(return_value=True)
+    mock_connect_button.inner_text = AsyncMock(return_value="Connect")
+    mock_connect_locator = MagicMock()
+    mock_connect_locator.first = mock_connect_button
+    
+    def locator_side_effect(selector):
+        if "More" in selector or "artdeco-dropdown__trigger" in selector:
+            return mock_more_locator
+        elif "Connect" in selector:
+            return mock_connect_locator
+        return mock_more_locator
+    
+    mock_client.page.locator.side_effect = locator_side_effect
+    
+    # Execute
+    status = await connection_remover.check_connection_status(
+        mock_client, "https://www.linkedin.com/in/test-profile"
+    )
+    
+    # Verify
+    assert status == "not_connected"
+    mock_client.navigate_to.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_check_connection_status_unknown(mock_client):
+    """Test checking connection status when status is unknown."""
+    # Setup: Neither More nor Connect button found
+    mock_more_button = AsyncMock()
+    mock_more_button.is_visible = AsyncMock(return_value=False)
+    mock_more_locator = MagicMock()
+    mock_more_locator.first = mock_more_button
+    
+    mock_connect_button = AsyncMock()
+    mock_connect_button.is_visible = AsyncMock(return_value=False)
+    mock_connect_locator = MagicMock()
+    mock_connect_locator.first = mock_connect_button
+    
+    def locator_side_effect(selector):
+        if "More" in selector or "artdeco-dropdown__trigger" in selector:
+            return mock_more_locator
+        elif "Connect" in selector:
+            return mock_connect_locator
+        return mock_more_locator
+    
+    mock_client.page.locator.side_effect = locator_side_effect
+    
+    # Execute
+    status = await connection_remover.check_connection_status(
+        mock_client, "https://www.linkedin.com/in/test-profile"
+    )
+    
+    # Verify
+    assert status == "unknown"
+    mock_client.navigate_to.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_disconnect_connection_dry_run(mock_client):
+    """Test dry run disconnection - identifies More and Remove connection selectors."""
     # Setup: Mock successful finding of More button and Remove option
     mock_more_button = AsyncMock()
     mock_more_button.is_visible = AsyncMock(return_value=True)
@@ -32,9 +125,11 @@ async def test_remove_connection_dry_run(mock_client):
         return mock_more_locator
     
     mock_client.page.locator.side_effect = locator_side_effect
+    mock_client.page.wait_for_selector = AsyncMock()
+    mock_client.close_new_tabs = AsyncMock()
     
     # Execute
-    success, message = await connection_remover.remove_connection(
+    success, message = await connection_remover.disconnect_connection(
         mock_client, "https://www.linkedin.com/in/test-profile", dry_run=True
     )
     
@@ -48,8 +143,8 @@ async def test_remove_connection_dry_run(mock_client):
 
 
 @pytest.mark.asyncio
-async def test_check_profile_connection_status(mock_client):
-    """Test checking if a profile is connected or not."""
+async def test_find_more_button(mock_client):
+    """Test finding the More button helper function."""
     # Setup: Profile is connected (More button exists)
     mock_more_button = AsyncMock()
     mock_more_button.is_visible = AsyncMock(return_value=True)

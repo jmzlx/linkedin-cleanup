@@ -39,12 +39,54 @@ async def find_remove_connection_option(client: LinkedInClient) -> Optional[obje
     return None
 
 
-async def remove_connection(
+async def check_connection_status(client: LinkedInClient, url: str) -> str:
+    """
+    Check if we are connected to a profile.
+    Returns: 'connected', 'not_connected', or 'unknown'
+    """
+    page = client.page
+    try:
+        # Navigate to profile
+        print(f"    → Navigating to profile: {url}")
+        await client.navigate_to(url)
+        print("    ✓ Profile page loaded")
+        
+        # Check for "More" button (indicates connected)
+        more_button = await find_more_button(client)
+        if more_button:
+            print("    ✓ Connection status: connected (More button found)")
+            return "connected"
+        
+        # Check for "Connect" button (indicates not connected)
+        print("    → Checking for Connect button...")
+        connect_button = page.locator(config.CONNECT_BUTTON_SELECTOR).first
+        try:
+            if await connect_button.is_visible(timeout=config.SHORT_SELECTOR_TIMEOUT):
+                connect_text = await connect_button.inner_text()
+                if "Connect" in connect_text:
+                    print("    ✓ Connection status: not_connected (Connect button found)")
+                    return "not_connected"
+        except Exception:
+            pass
+        
+        # If neither button is found, status is unknown
+        print("    ⚠ Connection status: unknown (neither More nor Connect button found)")
+        return "unknown"
+    
+    except Exception as e:
+        print(f"    ✗ Error checking connection status: {str(e)}")
+        return "unknown"
+
+
+async def disconnect_connection(
     client: LinkedInClient,
     url: str,
     dry_run: bool = False
 ) -> Tuple[bool, str]:
-    """Remove a single connection. Returns (success, message)."""
+    """
+    Disconnect from a LinkedIn connection.
+    Returns (success, message).
+    """
     page = client.page
     try:
         # Navigate to profile

@@ -9,7 +9,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 
 # File paths (relative to project root)
 COOKIES_FILE = str(_PROJECT_ROOT / "data" / "linkedin_cookies.json")
-PROGRESS_FILE = str(_PROJECT_ROOT / "data" / "processed_connections.json")
+PROGRESS_FILE = str(_PROJECT_ROOT / "data" / "processed_connections.db")
 OUTPUT_CSV = str(_PROJECT_ROOT / "data" / "urls_to_remove.csv")
 DEFAULT_OUTPUT_CSV = str(_PROJECT_ROOT / "data" / "country_filtered_connections.csv")
 
