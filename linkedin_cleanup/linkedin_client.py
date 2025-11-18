@@ -157,6 +157,19 @@ class LinkedInClient:
         
         self.page = await self.context.new_page()
         
+        # Set up listener to automatically close unwanted tabs (e.g., jobs page)
+        async def handle_new_page(new_page):
+            """Close unwanted tabs that LinkedIn might open."""
+            try:
+                await new_page.wait_for_load_state("domcontentloaded", timeout=2000)
+                url = new_page.url
+                if "linkedin.com/jobs" in url:
+                    await new_page.close()
+            except Exception:
+                pass
+        
+        self.context.on("page", handle_new_page)
+        
         # Remove webdriver property
         await self.page.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', {
@@ -204,6 +217,45 @@ class LinkedInClient:
         
         print(f"ERROR: Login timeout after {max_wait_time} seconds. Please ensure you're logged in and try again.")
         return False
+    
+    async def close_new_tabs(self, keep_url_pattern: str = None):
+        """Close any new tabs that were opened, keeping only the main page.
+        
+        Args:
+            keep_url_pattern: If provided, keep tabs matching this URL pattern (e.g., 'linkedin.com/in/')
+        """
+        if not self.context:
+            return
+        
+        pages = self.context.pages
+        if len(pages) <= 1:
+            return  # Only one page, nothing to close
+        
+        # Find the main page (the one we're currently using)
+        main_page = self.page
+        
+        # Close any other pages
+        for page in pages:
+            if page != main_page:
+                url = page.url
+                # If keep_url_pattern is specified and this page matches, keep it
+                if keep_url_pattern and keep_url_pattern in url:
+                    continue
+                # Close unwanted tabs (especially jobs page)
+                if "linkedin.com/jobs" in url:
+                    print(f"    → Closing unwanted tab: {url}")
+                    await page.close()
+                elif page != main_page:
+                    # Close any other new tabs
+                    print(f"    → Closing new tab: {url}")
+                    await page.close()
+        
+        # Ensure we're still using the main page
+        if self.page.is_closed():
+            # If main page was closed, use the first remaining page
+            remaining_pages = self.context.pages
+            if remaining_pages:
+                self.page = remaining_pages[0]
     
     async def close(self):
         """Close browser and cleanup resources."""

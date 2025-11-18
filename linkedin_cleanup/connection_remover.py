@@ -11,7 +11,6 @@ async def find_more_button(client: LinkedInClient) -> Optional[object]:
     """Find the 'More' button (three dots) in the profile section."""
     page = client.page
     print("    → Looking for 'More' button (three dots)...")
-    # Look for the More button specifically in the main profile area, not the nav
     for selector in config.MORE_BUTTON_SELECTORS:
         try:
             button = page.locator(selector).first
@@ -96,10 +95,8 @@ async def remove_connection(
         
         # LIVE MODE: Actually remove the connection
         print("    → Clicking 'Remove connection' option...")
-        # LinkedIn now removes connections directly without a confirmation modal
         await remove_option.scroll_into_view_if_needed()
         
-        # Click the remove option
         try:
             await remove_option.click(force=True)
             print("    ✓ Clicked 'Remove connection'")
@@ -116,8 +113,11 @@ async def remove_connection(
         print("    → Waiting for removal to process...")
         await client.random_delay(2, 3)
         
+        # Close any new tabs that LinkedIn may have opened (e.g., jobs page)
+        print("    → Checking for and closing any unwanted new tabs...")
+        await client.close_new_tabs(keep_url_pattern="linkedin.com/in/")
+        
         # Navigate back to the profile URL to verify removal
-        # This ensures we're on the correct page regardless of any popups/redirects
         print("    → Navigating back to profile to verify removal...")
         await client.navigate_to(url)
         

@@ -59,8 +59,8 @@ NEXT_BUTTON_SELECTORS = [
 # Selectors - Connection removal
 MORE_BUTTON_SELECTORS = [
     'main button.artdeco-dropdown__trigger:has-text("More")',  # Most specific: in main content
-    'section.artdeco-card button.artdeco-dropdown__trigger',  # In profile card
     'div.ph5 button.artdeco-dropdown__trigger:has-text("More")',  # In profile container
+    # Note: Removed generic 'section.artdeco-card' selector to avoid matching nav buttons
 ]
 REMOVE_CONNECTION_SELECTOR = 'div[role="button"][aria-label*="Remove your connection"]'
 DROPDOWN_CONTENT_SELECTOR = 'div.artdeco-dropdown__content'
