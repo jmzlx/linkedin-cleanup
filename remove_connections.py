@@ -296,13 +296,14 @@ class LinkedInCleanup:
         
         print(f"\n✓ Batch {batch_num} complete!")
     
-    async def run(self):
+    async def run(self, input_csv: Optional[str] = None):
         """Main execution method."""
         self.print_banner("LINKEDIN CONNECTION CLEANUP")
         
         # Load connections from CSV
-        print(f"Loading connections from {OUTPUT_CSV}...")
-        df = pd.read_csv(OUTPUT_CSV)
+        csv_path = input_csv or OUTPUT_CSV
+        print(f"Loading connections from {csv_path}...")
+        df = pd.read_csv(csv_path)
         urls = df["URL"].tolist()
         print(f"Found {len(urls)} connections to process.")
         
@@ -385,6 +386,12 @@ async def main():
         metavar="URL",
         help="Process a specific profile URL (works with or without --dry-run)"
     )
+    parser.add_argument(
+        "--input-csv",
+        type=str,
+        metavar="CSV",
+        help=f"Input CSV file with connections to remove (default: {OUTPUT_CSV})"
+    )
     args = parser.parse_args()
     
     cleanup = LinkedInCleanup(dry_run=args.dry_run)
@@ -423,7 +430,7 @@ async def main():
     else:
         if args.dry_run:
             cleanup.print_banner("DRY RUN MODE - Will test selectors but not remove connections")
-        await cleanup.run()
+        await cleanup.run(input_csv=args.input_csv)
 
 
 if __name__ == "__main__":
