@@ -40,10 +40,10 @@ def _init_db(conn: sqlite3.Connection):
 
 
 def get_pending_urls() -> List[str]:
-    """Get all URLs with status='pending' or NULL."""
+    """Get all URLs with status='pending', 'failed', or NULL."""
     with _get_db() as conn:
         rows = conn.execute(
-            "SELECT url FROM connections WHERE status IS NULL OR status = 'pending'"
+            "SELECT url FROM connections WHERE status IS NULL OR status = 'pending' OR status = 'failed'"
         ).fetchall()
         return [row['url'] for row in rows]
 
