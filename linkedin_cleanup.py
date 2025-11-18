@@ -242,12 +242,14 @@ class LinkedInCleanup:
                 return True, "[DRY RUN] Successfully found all selectors - would remove connection"
             
             # LIVE MODE: Actually remove the connection
-            # Use JavaScript click (most reliable for dropdown items that fail visibility checks)
-            await remove_option.evaluate("element => element.click()")
+            # Scroll into view and use native Playwright click with force
+            await remove_option.scroll_into_view_if_needed()
+            await asyncio.sleep(0.3)
+            await remove_option.click(force=True)
             
             # Wait for confirmation modal to appear
             try:
-                await self.page.wait_for_selector('[role="dialog"], .artdeco-modal', timeout=3000)
+                await self.page.wait_for_selector('[role="dialog"], .artdeco-modal', timeout=5000)
             except:
                 pass  # Continue even if modal selector not found
             
