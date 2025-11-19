@@ -10,6 +10,7 @@ from typing import Tuple
 from linkedin_cleanup import config
 from linkedin_cleanup import connection_remover
 from linkedin_cleanup.db import get_pending_urls, update_connection_status, get_all_connections
+from linkedin_cleanup.random_actions import perform_random_action
 from linkedin_cleanup.utils import LinkedInClientError, print_banner, setup_linkedin_client, with_timeout
 
 # Maximum time to spend on a single profile (20 seconds)
@@ -130,12 +131,16 @@ async def run_cleanup(dry_run: bool = False, num_profiles: int = None):
                     else:
                         failed_count += 1
                         print(f"    ❌ FAILED: {message}")
+                        
                 except Exception as e:
                     # Unexpected error - mark as failed and continue
                     error_msg = f"Unexpected error: {str(e)}"
                     update_connection_status(url, "failed", error_msg, timestamp)
                     failed_count += 1
                     print(f"    ❌ ERROR: {error_msg} - skipping to next profile")
+                
+                # Attempt random action (function decides internally based on probability)
+                await perform_random_action(client)
                 
                 # Delay before next connection (except for the last one)
                 if idx < len(remaining):

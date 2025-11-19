@@ -64,3 +64,6 @@ CONNECT_BUTTON_SELECTOR = 'button:has-text("Connect")'
 # Safety limits
 MAX_PAGES = 100  # Maximum pages to extract (safety limit)
 
+# Random actions - Anti-detection
+RANDOM_ACTION_PROBABILITY = 0.3  # 30% chance to perform random action after each profile
+

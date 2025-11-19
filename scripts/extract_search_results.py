@@ -11,6 +11,7 @@ import pandas as pd
 
 from linkedin_cleanup import config
 from linkedin_cleanup import search_extractor
+from linkedin_cleanup.random_actions import perform_random_action
 from linkedin_cleanup.utils import LinkedInClientError, print_banner, setup_linkedin_client, with_timeout
 
 # Maximum time to spend on a single page (30 seconds)
@@ -93,6 +94,9 @@ async def extract_all_profiles(client, search_url: str, max_pages: int = None) -
                 break  # Timeout
             print("✓ No more pages available. Extraction complete.")
             break
+        
+        # Perform random action in new tab to preserve search results
+        await perform_random_action(client, new_tab=True)
         
         page_num += 1
     
