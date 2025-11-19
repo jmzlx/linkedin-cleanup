@@ -1,23 +1,31 @@
 """Human-like behaviors to prevent automation detection."""
+
 import asyncio
+import logging
 import random
-from typing import TYPE_CHECKING, Awaitable, Callable, List, Optional
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
+
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from linkedin_cleanup import config
 
 if TYPE_CHECKING:
     from linkedin_cleanup.linkedin_client import LinkedInClient
 
+logger = logging.getLogger(__name__)
 
-async def random_delay(min_sec: Optional[float] = None, max_sec: Optional[float] = None):
+
+async def random_delay(min_sec: float | None = None, max_sec: float | None = None):
     """Random delay to mimic human behavior."""
-    await asyncio.sleep(random.uniform(
-        min_sec or config.EXTRACTION_DELAY_MIN,
-        max_sec or config.EXTRACTION_DELAY_MAX
-    ))
+    await asyncio.sleep(
+        random.uniform(
+            min_sec or config.EXTRACTION_DELAY_MIN, max_sec or config.EXTRACTION_DELAY_MAX
+        )
+    )
 
 
-async def _try_click_element(page, selectors: List[str], timeout: int = 3000) -> bool:
+async def _try_click_element(page, selectors: list[str], timeout: int = 3000) -> bool:
     """Try to find and click an element using a list of selectors."""
     for selector in selectors:
         try:
@@ -25,7 +33,8 @@ async def _try_click_element(page, selectors: List[str], timeout: int = 3000) ->
             if await element.is_visible(timeout=timeout):
                 await element.click()
                 return True
-        except Exception:
+        except (PlaywrightTimeoutError, AttributeError) as e:
+            logger.debug(f"Failed to click element with selector {selector}: {e}")
             continue
     return False
 
@@ -36,19 +45,20 @@ async def action_click_logo_and_open_comments(client: "LinkedInClient") -> bool:
     try:
         await client.navigate_to("https://www.linkedin.com/feed")
         await random_delay()
-        
+
         comment_selectors = [
             'button[aria-label="Comment"]',
             'button[aria-label*="Comment"]:not([aria-label*="comments"])',
         ]
-        
+
         if not await _try_click_element(page, comment_selectors, timeout=5000):
             return False
-        
+
         await random_delay()
         return True
-        
-    except Exception:
+
+    except Exception as e:
+        logger.debug(f"Error in action_click_logo_and_open_comments: {e}")
         return False
 
 
@@ -59,9 +69,9 @@ async def action_open_messages_and_click_conversation(client: "LinkedInClient") 
         messages_selectors = ['a[href*="messaging"]', 'nav a[href*="messaging"]']
         if not await _try_click_element(page, messages_selectors, timeout=3000):
             await client.navigate_to("https://www.linkedin.com/messaging")
-        
+
         await random_delay()
-        
+
         scroll_selectors = ['div[role="listbox"]', 'div[class*="conversation-list"]']
         scroll_container = None
         for selector in scroll_selectors:
@@ -70,15 +80,15 @@ async def action_open_messages_and_click_conversation(client: "LinkedInClient") 
                 if await container.is_visible(timeout=3000):
                     scroll_container = container
                     break
-            except Exception:
+            except (PlaywrightTimeoutError, AttributeError):
                 continue
-        
+
         scroll_amount = random.randint(200, 500)
         target = scroll_container if scroll_container else page
         await target.evaluate(f"element => element.scrollBy(0, {scroll_amount})")
-        
+
         await random_delay()
-        
+
         message_selectors = ['div[role="option"]', 'a[href*="/messaging/thread/"]']
         for selector in message_selectors:
             try:
@@ -91,17 +101,18 @@ async def action_open_messages_and_click_conversation(client: "LinkedInClient") 
                         await message.click()
                         await random_delay()
                         return True
-            except Exception:
+            except (PlaywrightTimeoutError, AttributeError):
                 continue
-        
+
         return False
-        
-    except Exception:
+
+    except Exception as e:
+        logger.debug(f"Error in action_open_messages_and_click_conversation: {e}")
         return False
 
 
 # List of available random actions
-AVAILABLE_ACTIONS: List[Callable[["LinkedInClient"], Awaitable[bool]]] = [
+AVAILABLE_ACTIONS: list[Callable[["LinkedInClient"], Awaitable[bool]]] = [
     action_click_logo_and_open_comments,
     action_open_messages_and_click_conversation,
 ]
@@ -111,22 +122,23 @@ async def perform_random_action(client: "LinkedInClient", new_tab: bool = False)
     """Perform a random action from the available actions list based on configured probability."""
     if random.random() > config.RANDOM_ACTION_PROBABILITY:
         return False
-    
+
     if not AVAILABLE_ACTIONS:
         return False
-    
+
     action = random.choice(AVAILABLE_ACTIONS)
     original_page = client.page if new_tab else None
     new_page = None
-    
+
     try:
         if new_tab and client.context:
             new_page = await client.context.new_page()
             client.page = new_page
-        
+
         return await action(client)
-        
-    except Exception:
+
+    except Exception as e:
+        logger.debug(f"Error performing random action: {e}")
         return False
     finally:
         if new_tab and original_page:
@@ -134,6 +146,5 @@ async def perform_random_action(client: "LinkedInClient", new_tab: bool = False)
             if new_page and not new_page.is_closed():
                 try:
                     await new_page.close()
-                except Exception:
-                    pass
-
+                except Exception as e:
+                    logger.debug(f"Error closing new page: {e}")
