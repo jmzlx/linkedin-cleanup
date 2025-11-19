@@ -139,8 +139,13 @@ async def process_batch(
     return False  # Normal completion, continue processing
 
 
-async def run_cleanup(dry_run: bool = False):
-    """Main execution function."""
+async def run_cleanup(dry_run: bool = False, num_batches: int = None):
+    """Main execution function.
+    
+    Args:
+        dry_run: If True, don't actually remove connections
+        num_batches: If specified, process only this many batches (starting from batch 1)
+    """
     _print_banner("LINKEDIN CONNECTION CLEANUP")
     
     if dry_run:
@@ -181,9 +186,20 @@ async def run_cleanup(dry_run: bool = False):
         
         # Process in batches
         total_batches = math.ceil(len(remaining) / config.BATCH_SIZE)
-        print(f"📦 Processing in {total_batches} batch(es) of up to {config.BATCH_SIZE} connections each\n")
         
-        for batch_num in range(1, total_batches + 1):
+        # If num_batches is specified, limit processing to that many batches
+        if num_batches is not None:
+            if num_batches < 1:
+                print(f"❌ Error: Number of batches must be at least 1.")
+                return
+            batches_to_process = min(num_batches, total_batches)
+            print(f"📦 Processing {batches_to_process} batch(es) of {total_batches} total (up to {config.BATCH_SIZE} connections each)\n")
+            batch_range = range(1, batches_to_process + 1)
+        else:
+            print(f"📦 Processing in {total_batches} batch(es) of up to {config.BATCH_SIZE} connections each\n")
+            batch_range = range(1, total_batches + 1)
+        
+        for batch_num in batch_range:
             start_idx = (batch_num - 1) * config.BATCH_SIZE
             end_idx = min(start_idx + config.BATCH_SIZE, len(remaining))
             batch_urls = remaining[start_idx:end_idx]
@@ -195,8 +211,9 @@ async def run_cleanup(dry_run: bool = False):
                 print("\n🛑 Terminating script due to consecutive timeouts.")
                 break  # Exit the batch loop
             
-            # Wait between batches (except after the last one)
-            if batch_num < total_batches:
+            # Wait between batches (except after the last one in the range)
+            last_batch_in_range = batch_range.stop - 1
+            if batch_num < last_batch_in_range:
                 delay = random.uniform(
                     config.BATCH_DELAY_MIN,
                     config.BATCH_DELAY_MAX
@@ -239,6 +256,12 @@ async def main():
         type=str,
         metavar="URL",
         help="Process a specific profile URL (works with or without --dry-run)"
+    )
+    parser.add_argument(
+        "--batches",
+        type=int,
+        metavar="N",
+        help="Process only the first N batches (works with or without --dry-run)"
     )
     args = parser.parse_args()
     
@@ -298,7 +321,7 @@ async def main():
     
     # Normal batch run
     else:
-        await run_cleanup(dry_run=args.dry_run)
+        await run_cleanup(dry_run=args.dry_run, num_batches=args.batches)
 
 
 if __name__ == "__main__":
