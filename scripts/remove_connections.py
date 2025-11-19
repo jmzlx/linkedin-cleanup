@@ -33,8 +33,12 @@ async def process_batch(
     batch_num: int,
     total_batches: int,
     dry_run: bool
-):
-    """Process a batch of connections."""
+) -> bool:
+    """Process a batch of connections.
+    
+    Returns:
+        True if script should terminate (3 consecutive timeouts), False otherwise.
+    """
     _print_banner(f"BATCH {batch_num}/{total_batches} - Processing {len(urls)} connections")
     
     success_count = 0
@@ -108,7 +112,7 @@ async def process_batch(
             # Terminate after 3 consecutive timeouts
             if consecutive_timeouts >= 3:
                 print(f"\n⚠️  3 consecutive timeouts detected. Terminating script.")
-                return
+                return True  # Signal that script should terminate
         except Exception as e:
             # Unexpected error - mark as failed and continue
             error_msg = f"Unexpected error: {str(e)}"
@@ -131,6 +135,8 @@ async def process_batch(
     print(f"  • Failed: {failed_count}")
     print(f"  • Skipped: {skipped_count}")
     print(f"{'='*60}")
+    
+    return False  # Normal completion, continue processing
 
 
 async def run_cleanup(dry_run: bool = False):
@@ -182,7 +188,12 @@ async def run_cleanup(dry_run: bool = False):
             end_idx = min(start_idx + config.BATCH_SIZE, len(remaining))
             batch_urls = remaining[start_idx:end_idx]
             
-            await process_batch(client, batch_urls, batch_num, total_batches, dry_run)
+            should_terminate = await process_batch(client, batch_urls, batch_num, total_batches, dry_run)
+            
+            # Check if we should terminate due to consecutive timeouts
+            if should_terminate:
+                print("\n🛑 Terminating script due to consecutive timeouts.")
+                break  # Exit the batch loop
             
             # Wait between batches (except after the last one)
             if batch_num < total_batches:
@@ -193,9 +204,7 @@ async def run_cleanup(dry_run: bool = False):
                 print(f"\n⏳ Waiting {delay:.0f} seconds before next batch...")
                 await asyncio.sleep(delay)
                 print("✓ Delay complete, continuing to next batch...\n")
-        
-        _print_banner("ALL BATCHES COMPLETE!")
-        
+                
         # Summary
         all_connections = get_all_connections()
         statuses = [conn['status'] for conn in all_connections]
