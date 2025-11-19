@@ -73,8 +73,7 @@ async def extract_all_profiles(client, search_url: str, max_pages: int = None) -
         print(f"\n📊 Page {page_num} Summary:")
         print(f"   • Total profiles on page: {len(page_profiles)}")
         print(f"   • New profiles: {new_count}")
-        if duplicate_count > 0:
-            print(f"   • Duplicates skipped: {duplicate_count}")
+        print(f"   • Duplicates skipped: {duplicate_count}")
         print(f"   • Total profiles collected so far: {len(all_profiles)}")
         
         # Check if we've reached the page limit
@@ -112,10 +111,7 @@ async def run_extraction(search_url: str, output_csv: str = None, dry_run: bool 
     print_banner("LINKEDIN SEARCH RESULTS EXTRACTOR")
     
     print(f"🔗 Search URL: {search_url}")
-    if dry_run:
-        print(f"🧪 DRY RUN MODE - No CSV will be saved")
-    else:
-        print(f"💾 Output CSV: {output_csv}")
+    print(f"🧪 DRY RUN MODE - No CSV will be saved" if dry_run else f"💾 Output CSV: {output_csv}")
     if max_pages:
         print(f"📄 Max pages: {max_pages}")
     print()
@@ -142,15 +138,11 @@ async def run_extraction(search_url: str, output_csv: str = None, dry_run: bool 
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 df.to_csv(output_path, index=False)
                 print(f"✓ Saved to: {output_csv}")
-            else:
-                print(f"🧪 DRY RUN: Skipping CSV save")
+            # Note: dry_run mode skips CSV save (no print needed - already indicated at start)
             
             print_banner("EXTRACTION COMPLETE!")
             print(f"✅ Total profiles extracted: {len(all_profiles)}")
-            if not dry_run:
-                print(f"📁 CSV saved to: {output_csv}")
-            else:
-                print(f"🧪 DRY RUN: No file saved")
+            print(f"📁 CSV saved to: {output_csv}" if not dry_run else f"🧪 DRY RUN: No file saved")
     except LinkedInClientError as e:
         print(f"\n❌ {e}")
         return

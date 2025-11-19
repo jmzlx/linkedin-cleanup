@@ -24,13 +24,8 @@ PAGE_DELAY_MIN = 3  # seconds between pages
 PAGE_DELAY_MAX = 6  # seconds between pages
 
 # Timing delays - Removal
-REMOVAL_DELAY_MIN = 5  # seconds between actions
-REMOVAL_DELAY_MAX = 10  # seconds between actions
-BATCH_DELAY_MIN = 120  # seconds between batches (2 minutes)
-BATCH_DELAY_MAX = 180  # seconds between batches (3 minutes)
-
-# Batch processing
-BATCH_SIZE = 10
+REMOVAL_DELAY_MIN = 5  # seconds between profiles
+REMOVAL_DELAY_MAX = 10  # seconds between profiles
 
 # Browser settings
 BROWSER_HEADLESS = False

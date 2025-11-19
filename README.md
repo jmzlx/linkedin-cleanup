@@ -1,6 +1,6 @@
 # LinkedIn Connection Cleanup
 
-Automated tool to remove LinkedIn connections using Playwright. Processes connections in batches with bot detection avoidance.
+Automated tool to remove LinkedIn connections using Playwright. Processes connections individually with random delays to avoid bot detection.
 
 ## Setup
 
@@ -53,18 +53,16 @@ The script will:
 1. Load connections from `data/output.csv`
 2. Check for saved cookies (if you've logged in before)
 3. If no cookies, open browser for manual login
-4. Process connections in batches of 10
-5. Require confirmation between batches
-6. Save progress after each connection
+4. Process connections individually with random delays between them
+5. Save progress after each connection
 
 ## Features
 
 - **Manual Login**: First run requires manual login, then cookies are saved for future runs
-- **Batch Processing**: Processes 10 connections at a time with breaks
+- **Individual Profile Processing**: Processes connections one at a time with random delays
 - **Progress Tracking**: Saves progress to `data/processed_connections.json` to allow resuming
 - **Bot Detection Avoidance**:
-  - Random delays between actions (5-10 seconds)
-  - Longer delays between batches (2-3 minutes)
+  - Random delays between profiles (5-10 seconds)
   - Human-like mouse movements
   - Stealth browser settings
 - **Error Handling**: Continues processing even if individual connections fail
@@ -103,9 +101,7 @@ linkedin-cleanup/
 
 You can modify configuration constants in `linkedin_cleanup/config.py`:
 
-- `BATCH_SIZE`: Number of connections per batch (default: 10)
-- `REMOVAL_DELAY_MIN` / `REMOVAL_DELAY_MAX`: Random delay between actions in seconds (default: 5-10)
-- `BATCH_DELAY_MIN` / `BATCH_DELAY_MAX`: Delay between batches in seconds (default: 120-180)
+- `REMOVAL_DELAY_MIN` / `REMOVAL_DELAY_MAX`: Random delay between profiles in seconds (default: 5-10)
 
 ## Notes
 
