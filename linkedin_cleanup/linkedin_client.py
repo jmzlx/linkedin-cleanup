@@ -4,13 +4,22 @@ Shared client for all LinkedIn automation tasks.
 """
 import asyncio
 import json
-import random
 from pathlib import Path
 from typing import List, Optional
 
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 from linkedin_cleanup import config
+from linkedin_cleanup.random_actions import random_delay
+from linkedin_cleanup.utils import print_banner
+
+# HTTP error messages mapping
+HTTP_ERROR_MESSAGES = {
+    403: " - Access forbidden (may be rate limited or blocked)",
+    429: " - Rate limited (too many requests)",
+    500: " - Server error",
+    503: " - Service unavailable",
+}
 
 
 class LinkedInClient:
@@ -35,139 +44,84 @@ class LinkedInClient:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(cookies, indent=2))
     
-    async def random_delay(self, min_sec: float = None, max_sec: float = None):
-        """
-        Random delay to mimic human behavior.
-        Uses default delays from config if not specified.
-        """
-        if min_sec is None:
-            min_sec = config.EXTRACTION_DELAY_MIN
-        if max_sec is None:
-            max_sec = config.EXTRACTION_DELAY_MAX
-        await asyncio.sleep(random.uniform(min_sec, max_sec))
-    
     async def human_like_click(self, element):
         """Perform a click. Playwright's click() already simulates human behavior."""
         await element.click()
     
     async def navigate_to(self, url: str):
         """Navigate to a URL with timeout handling."""
-        # Use a shorter timeout to prevent getting stuck on pages that never load
-        navigation_timeout = 30000  # 30 seconds instead of 60
         try:
             response = await self.page.goto(
                 url,
                 wait_until="domcontentloaded",
-                timeout=navigation_timeout
+                timeout=30000
             )
             
-            # Check HTTP status code - terminate on non-success codes
-            if response:
-                status = response.status
-                if status >= 400:
-                    error_msg = f"HTTP {status} error when accessing {url}"
-                    if status == 403:
-                        error_msg += " - Access forbidden (may be rate limited or blocked)"
-                    elif status == 429:
-                        error_msg += " - Rate limited (too many requests)"
-                    elif status == 500:
-                        error_msg += " - Server error"
-                    elif status == 503:
-                        error_msg += " - Service unavailable"
-                    
-                    print(f"\n❌ {error_msg}")
-                    print("Terminating script to prevent further issues.")
-                    raise SystemExit(1)
+            if response and response.status >= 400:
+                error_msg = f"HTTP {response.status} error when accessing {url}"
+                error_msg += HTTP_ERROR_MESSAGES.get(response.status, "")
+                print(f"\n❌ {error_msg}")
+                raise SystemExit(1)
         except SystemExit:
-            raise  # Re-raise SystemExit to terminate
-        except Exception as e:
-            # If navigation times out, check if we're at least on the right domain
-            current_url = self.page.url
-            if "linkedin.com" not in current_url:
-                print(f"  Warning: Navigation timeout, but continuing anyway...")
-            pass  # Continue even if timeout
-        
-        # Wait for page to finish loading (check tab loading state)
-        # This prevents the script from getting stuck on pages that never finish loading
-        # Use Playwright's wait_for_load_state with a timeout
-        try:
-            # Wait for "load" state (DOM and resources loaded) with a timeout
-            # This handles the tab spinner issue - if the page is stuck loading,
-            # this will timeout and we'll continue anyway
-            await self.page.wait_for_load_state("load", timeout=15000)  # 15 second timeout
+            raise
         except Exception:
-            # If load times out, the page might be stuck - log and continue
-            # LinkedIn pages sometimes have continuous network activity, so we don't
-            # wait for networkidle which might never happen
-            print(f"  Warning: Page load timeout, continuing anyway...")
+            if "linkedin.com" not in self.page.url:
+                print("⚠ Navigation timeout")
         
-        # Small random delay for page content to fully render
-        await self.random_delay(1, 2)
+        try:
+            await self.page.wait_for_load_state("load", timeout=15000)
+        except Exception:
+            pass
+        
+        await random_delay()
     
     async def is_logged_in(self) -> bool:
         """Check if we're logged in by looking for logged-in page indicators."""
         try:
-            # Check for common logged-in page elements
-            # Feed page: has main feed content
-            # Profile page: has profile content (not login page)
-            # Search page: has search results
-            
-            # Quick URL check first (fast)
             url = self.page.url
             if "linkedin.com/login" in url or "linkedin.com/uas/login" in url:
                 return False
             
-            # Check for logged-in indicators on the page
-            # Look for elements that only appear when logged in
-            logged_in_indicators = [
-                'nav[aria-label="Main navigation"]',  # Main nav bar
-                'header[data-test-id="global-nav"]',  # Global nav header
-                'div[data-test-id="feed-container"]',  # Feed container
-                'main[role="main"]',  # Main content area (not login form)
+            indicators = [
+                'nav[aria-label="Main navigation"]',
+                'header[data-test-id="global-nav"]',
+                'div[data-test-id="feed-container"]',
+                'main[role="main"]',
             ]
             
-            for selector in logged_in_indicators:
+            for selector in indicators:
                 try:
-                    element = self.page.locator(selector).first
-                    if await element.count() > 0:
+                    if await self.page.locator(selector).first.count() > 0:
                         return True
                 except Exception:
                     continue
             
-            # Fallback: check URL patterns (less reliable but better than nothing)
             return (
                 "linkedin.com/feed" in url
                 or ("linkedin.com/in/" in url and "login" not in url)
                 or "linkedin.com/search" in url
             )
         except Exception:
-            # If we can't determine, assume not logged in for safety
             return False
     
-    def print_banner(self, title: str):
-        """Print a formatted banner."""
-        print(f"\n{'='*80}\n{title}\n{'='*80}\n")
+    async def _safe_close(self, resource, close_method):
+        """Safely close a resource, ignoring any exceptions."""
+        if resource and close_method:
+            try:
+                await close_method()
+            except Exception:
+                pass
     
     async def setup_browser(self):
         """Set up browser with stealth settings."""
-        # Check if browser is already running
         if self.browser and self.browser.is_connected():
-            print("Browser already running, reusing existing instance.")
             return
         
-        # Clean up any existing instances before creating new ones
         if self.browser:
-            try:
-                await self.browser.close()
-            except Exception:
-                pass
+            await self._safe_close(self.browser, self.browser.close)
         if self.playwright:
-            try:
-                await self.playwright.stop()
-            except Exception:
-                pass
+            await self._safe_close(self.playwright, self.playwright.stop)
         
-        # Reset instance variables
         self.playwright = None
         self.browser = None
         self.context = None
@@ -192,28 +146,21 @@ class LinkedInClient:
             locale=config.BROWSER_LOCALE,
         )
         
-        # Load saved cookies if available
-        cookies = self.load_cookies()
-        if cookies:
+        if cookies := self.load_cookies():
             await self.context.add_cookies(cookies)
-            print("Loaded saved cookies.")
         
         self.page = await self.context.new_page()
         
-        # Set up listener to automatically close unwanted tabs (e.g., jobs page)
         async def handle_new_page(new_page):
-            """Close unwanted tabs that LinkedIn might open."""
             try:
                 await new_page.wait_for_load_state("domcontentloaded", timeout=2000)
-                url = new_page.url
-                if "linkedin.com/jobs" in url:
+                if "linkedin.com/jobs" in new_page.url:
                     await new_page.close()
             except Exception:
                 pass
         
         self.context.on("page", handle_new_page)
         
-        # Remove webdriver property
         await self.page.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined
@@ -225,95 +172,59 @@ class LinkedInClient:
         await self.navigate_to(config.LINKEDIN_FEED_URL)
         
         if await self.is_logged_in():
-            cookies = await self.context.cookies()
-            self.save_cookies(cookies)
+            self.save_cookies(await self.context.cookies())
             return True
         
-        # Not logged in, need manual login
-        self.print_banner("MANUAL LOGIN REQUIRED")
+        print_banner("MANUAL LOGIN REQUIRED")
         print("Please log in to LinkedIn in the browser window.")
-        print("Waiting for login (checking every 2 seconds, timeout after 5 minutes)...")
+        print("Waiting for login (timeout: 5 minutes)...")
         
-        # Poll for login status instead of blocking on input
-        max_wait_time = 300  # 5 minutes
-        check_interval = 2  # Check every 2 seconds
+        max_wait_time = 300
+        check_interval = 2
         elapsed = 0
         
         while elapsed < max_wait_time:
             await asyncio.sleep(check_interval)
             elapsed += check_interval
             
-            # Check if logged in (navigate to feed page periodically to verify)
-            if elapsed % 10 == 0:  # Navigate every 10 seconds
+            if elapsed % 10 == 0:
                 await self.navigate_to(config.LINKEDIN_FEED_URL)
-            # Otherwise, just check current page status without navigation
             
             if await self.is_logged_in():
-                cookies = await self.context.cookies()
-                self.save_cookies(cookies)
-                print(f"Login successful! Cookies saved. (Detected after {elapsed} seconds)")
+                self.save_cookies(await self.context.cookies())
+                print(f"✓ Login successful ({elapsed}s)")
                 return True
             
-            # Print progress every 10 seconds
             if elapsed % 10 == 0:
-                print(f"Still waiting for login... ({elapsed}/{max_wait_time} seconds)")
+                print(f"Waiting... ({elapsed}/{max_wait_time}s)")
         
-        print(f"ERROR: Login timeout after {max_wait_time} seconds. Please ensure you're logged in and try again.")
+        print(f"❌ Login timeout after {max_wait_time}s")
         return False
     
     async def close_new_tabs(self, keep_url_pattern: str = None):
-        """Close any new tabs that were opened, keeping only the main page.
-        
-        Args:
-            keep_url_pattern: If provided, keep tabs matching this URL pattern (e.g., 'linkedin.com/in/')
-        """
-        if not self.context:
+        """Close any new tabs that were opened, keeping only the main page."""
+        if not self.context or len(self.context.pages) <= 1:
             return
         
-        pages = self.context.pages
-        if len(pages) <= 1:
-            return  # Only one page, nothing to close
-        
-        # Find the main page (the one we're currently using)
         main_page = self.page
+        for page in self.context.pages:
+            if page == main_page:
+                continue
+            if keep_url_pattern and keep_url_pattern in page.url:
+                continue
+            await page.close()
         
-        # Close any other pages
-        for page in pages:
-            if page != main_page:
-                url = page.url
-                # If keep_url_pattern is specified and this page matches, keep it
-                if keep_url_pattern and keep_url_pattern in url:
-                    continue
-                # Close unwanted tabs (especially jobs page)
-                if "linkedin.com/jobs" in url:
-                    print(f"    → Closing unwanted tab: {url}")
-                    await page.close()
-                elif page != main_page:
-                    # Close any other new tabs
-                    print(f"    → Closing new tab: {url}")
-                    await page.close()
-        
-        # Ensure we're still using the main page
-        if self.page.is_closed():
-            # If main page was closed, use the first remaining page
-            remaining_pages = self.context.pages
-            if remaining_pages:
-                self.page = remaining_pages[0]
+        if self.page.is_closed() and self.context.pages:
+            self.page = self.context.pages[0]
     
     async def close(self):
         """Close browser and cleanup resources."""
         if self.browser:
-            try:
-                await self.browser.close()
-            except Exception:
-                pass
-            self.browser = None
+            await self._safe_close(self.browser, self.browser.close)
+        self.browser = None
         if self.playwright:
-            try:
-                await self.playwright.stop()
-            except Exception:
-                pass
-            self.playwright = None
+            await self._safe_close(self.playwright, self.playwright.stop)
+        self.playwright = None
         self.context = None
         self.page = None
 

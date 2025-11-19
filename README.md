@@ -81,6 +81,12 @@ linkedin-cleanup/
 ├── scripts/                    # Executable scripts
 │   ├── extract_search_results.py  # Extract profiles from search results
 │   └── remove_connections.py      # Remove LinkedIn connections
+├── tests/                      # Test suite
+│   ├── test_connection_removal.py
+│   ├── test_db.py
+│   ├── test_search_extraction.py
+│   ├── test_random_actions.py
+│   └── test_utils.py
 ├── notebooks/                 # Jupyter notebooks
 │   └── identify_connections.ipynb
 └── data/                      # Data files
@@ -101,7 +107,61 @@ linkedin-cleanup/
 
 You can modify configuration constants in `linkedin_cleanup/config.py`:
 
+- `EXTRACTION_DELAY_MIN` / `EXTRACTION_DELAY_MAX`: Random delay between actions in seconds (default: 2-4)
 - `REMOVAL_DELAY_MIN` / `REMOVAL_DELAY_MAX`: Random delay between profiles in seconds (default: 5-10)
+- `PAGE_DELAY_MIN` / `PAGE_DELAY_MAX`: Random delay between pages in seconds (default: 3-6)
+- `RANDOM_ACTION_PROBABILITY`: Probability of performing random actions (default: 0.3)
+
+## Testing
+
+The project includes comprehensive tests covering the main use cases.
+
+### Running Tests
+
+```bash
+# Install dependencies first
+uv sync
+
+# Run all tests
+pytest
+
+# Run with verbose output
+pytest -v
+```
+
+### Test Coverage
+
+The test suite covers:
+
+1. **Connection Removal** (`test_connection_removal.py`)
+   - Check connection status (connected, not connected, unknown)
+   - Disconnect connection (dry run mode)
+   - Find More button functionality
+
+2. **Database** (`test_db.py`)
+   - Update and get connection status
+   - Get pending URLs
+   - Get all connections for summary stats
+   - Status overwrite behavior
+   - Non-existent URL handling
+
+3. **Search Extraction** (`test_search_extraction.py`)
+   - Extract profiles from search page
+   - Pagination functionality
+
+4. **Random Actions** (`test_random_actions.py`)
+   - Probability-based action execution
+   - Random action behaviors
+
+5. **Utilities** (`test_utils.py`)
+   - URL normalization
+   - Profile name cleaning
+   - Timeout behavior
+   - Client setup error handling
+
+### Test Philosophy
+
+Tests focus on core functionality rather than exhaustive edge cases. Each test verifies a main use case with realistic scenarios.
 
 ## Notes
 

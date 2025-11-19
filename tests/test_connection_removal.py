@@ -4,7 +4,7 @@ Tests for connection removal functionality.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from linkedin_cleanup import connection_remover
+from linkedin_cleanup.connection_remover import ConnectionRemover
 
 
 @pytest.mark.asyncio
@@ -24,9 +24,8 @@ async def test_check_connection_status_connected(mock_client):
     mock_client.page.locator.side_effect = locator_side_effect
     
     # Execute
-    status = await connection_remover.check_connection_status(
-        mock_client, "https://www.linkedin.com/in/test-profile"
-    )
+    remover = ConnectionRemover(mock_client)
+    status = await remover.check_connection_status("https://www.linkedin.com/in/test-profile")
     
     # Verify
     assert status == "connected"
@@ -58,9 +57,8 @@ async def test_check_connection_status_not_connected(mock_client):
     mock_client.page.locator.side_effect = locator_side_effect
     
     # Execute
-    status = await connection_remover.check_connection_status(
-        mock_client, "https://www.linkedin.com/in/test-profile"
-    )
+    remover = ConnectionRemover(mock_client)
+    status = await remover.check_connection_status("https://www.linkedin.com/in/test-profile")
     
     # Verify
     assert status == "not_connected"
@@ -91,9 +89,8 @@ async def test_check_connection_status_unknown(mock_client):
     mock_client.page.locator.side_effect = locator_side_effect
     
     # Execute
-    status = await connection_remover.check_connection_status(
-        mock_client, "https://www.linkedin.com/in/test-profile"
-    )
+    remover = ConnectionRemover(mock_client)
+    status = await remover.check_connection_status("https://www.linkedin.com/in/test-profile")
     
     # Verify
     assert status == "unknown"
@@ -129,8 +126,9 @@ async def test_disconnect_connection_dry_run(mock_client):
     mock_client.close_new_tabs = AsyncMock()
     
     # Execute
-    success, message = await connection_remover.disconnect_connection(
-        mock_client, "https://www.linkedin.com/in/test-profile", dry_run=True
+    remover = ConnectionRemover(mock_client)
+    success, message = await remover.disconnect_connection(
+        "https://www.linkedin.com/in/test-profile", dry_run=True
     )
     
     # Verify
@@ -144,7 +142,7 @@ async def test_disconnect_connection_dry_run(mock_client):
 
 @pytest.mark.asyncio
 async def test_find_more_button(mock_client):
-    """Test finding the More button helper function."""
+    """Test finding the More button helper method."""
     # Setup: Profile is connected (More button exists)
     mock_more_button = AsyncMock()
     mock_more_button.is_visible = AsyncMock(return_value=True)
@@ -153,12 +151,13 @@ async def test_find_more_button(mock_client):
     mock_client.page.locator.return_value = mock_locator
     
     # Execute: Check if connected
-    result = await connection_remover.find_more_button(mock_client)
+    remover = ConnectionRemover(mock_client)
+    result = await remover._find_more_button()
     assert result is not None  # Connected
     
     # Setup: Profile is not connected (More button doesn't exist)
     mock_more_button.is_visible = AsyncMock(return_value=False)
     
     # Execute: Check if connected
-    result = await connection_remover.find_more_button(mock_client)
+    result = await remover._find_more_button()
     assert result is None  # Not connected

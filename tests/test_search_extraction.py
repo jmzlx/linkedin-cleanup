@@ -2,9 +2,9 @@
 Tests for search result extraction functionality.
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from linkedin_cleanup import search_extractor
+from linkedin_cleanup.search_extractor import SearchExtractor
 
 
 @pytest.mark.asyncio
@@ -49,10 +49,11 @@ async def test_extract_profiles_from_search_page(mock_client):
     mock_client.page.url = "https://www.linkedin.com/search/results/people/"
     mock_client.page.wait_for_selector = AsyncMock()
     mock_client.page.evaluate = AsyncMock(side_effect=mock_evaluate)
-    mock_client.random_delay = AsyncMock()
     
     # Execute
-    profiles = await search_extractor.extract_profiles_from_page(mock_client)
+    with patch('linkedin_cleanup.search_extractor.random_delay', new_callable=AsyncMock):
+        extractor = SearchExtractor(mock_client)
+        profiles = await extractor.extract_profiles_from_page()
     
     # Verify
     assert len(profiles) == 3
@@ -89,13 +90,14 @@ async def test_pagination_next_page(mock_client):
     mock_locator = MagicMock()
     mock_locator.first = mock_next_button
     mock_client.page.locator.return_value = mock_locator
-    mock_client.random_delay = AsyncMock()
     
     # Execute
-    result = await search_extractor.go_to_next_page(mock_client)
+    with patch('linkedin_cleanup.search_extractor.random_delay', new_callable=AsyncMock) as mock_delay:
+        extractor = SearchExtractor(mock_client)
+        result = await extractor.go_to_next_page()
     
     # Verify
     assert result is True
     mock_next_button.scroll_into_view_if_needed.assert_called()
     mock_next_button.click.assert_called()
-    mock_client.random_delay.assert_called()
+    mock_delay.assert_called()

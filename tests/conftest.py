@@ -43,7 +43,6 @@ def mock_client(mock_page):
     
     # Mock methods
     client.navigate_to = AsyncMock()
-    client.random_delay = AsyncMock()
     client.human_like_click = AsyncMock()
     
     return client

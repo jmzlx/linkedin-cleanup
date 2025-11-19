@@ -40,7 +40,7 @@ async def test_with_timeout_terminates_on_timeout():
 @pytest.mark.asyncio
 async def test_setup_linkedin_client_handles_login_failure(mock_client):
     """Test that setup_linkedin_client raises error and cleans up on login failure."""
-    with patch('linkedin_cleanup.utils.LinkedInClient') as mock_client_class:
+    with patch('linkedin_cleanup.linkedin_client.LinkedInClient') as mock_client_class:
         mock_client_class.return_value = mock_client
         mock_client.setup_browser = AsyncMock()
         mock_client.ensure_logged_in = AsyncMock(return_value=False)
