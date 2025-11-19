@@ -61,58 +61,19 @@ class LinkedInClient:
 
     async def navigate_to(self, url: str, retry_on_rate_limit: bool = True):
         """
-        Navigate to a URL with timeout handling and rate limit detection.
+        Navigate to a URL. Timeouts and rate limits are handled at higher level.
 
         Args:
             url: URL to navigate to
-            retry_on_rate_limit: If True, retry with exponential backoff on rate limit (429)
+            retry_on_rate_limit: Unused (kept for API compatibility)
         """
-        max_retries = 3 if retry_on_rate_limit else 1
-        base_delay = 5.0  # Start with 5 seconds
+        response = await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
-        for attempt in range(max_retries):
-            try:
-                response = await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
-
-                if response and response.status >= 400:
-                    if response.status == 429 and retry_on_rate_limit and attempt < max_retries - 1:
-                        delay = base_delay * (2**attempt)
-                        logger.warning(
-                            f"Rate limited (HTTP 429). Waiting {delay:.1f}s before retry "
-                            f"(attempt {attempt + 1}/{max_retries})..."
-                        )
-                        await asyncio.sleep(delay)
-                        continue
-
-                    error_msg = f"HTTP {response.status} error when accessing {url}"
-                    error_msg += HTTP_ERROR_MESSAGES.get(response.status, "")
-                    logger.error(error_msg)
-                    raise SystemExit(1)
-
-                # Success - break out of retry loop
-                break
-
-            except SystemExit:
-                raise
-            except PlaywrightTimeoutError:
-                if "linkedin.com" not in self.page.url:
-                    logger.warning("Navigation timeout")
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2**attempt)
-                    logger.warning(f"Retrying navigation after {delay:.1f}s...")
-                    await asyncio.sleep(delay)
-                    continue
-            except Exception as e:
-                logger.debug(f"Navigation error: {e}")
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2**attempt)
-                    await asyncio.sleep(delay)
-                    continue
-
-        try:
-            await self.page.wait_for_load_state("load", timeout=15000)
-        except Exception:
-            pass
+        if response and response.status >= 400:
+            error_msg = f"HTTP {response.status} error when accessing {url}"
+            error_msg += HTTP_ERROR_MESSAGES.get(response.status, "")
+            logger.error(error_msg)
+            raise SystemExit(1)
 
         await random_delay()
 

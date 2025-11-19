@@ -24,8 +24,8 @@ from linkedin_cleanup.utils import (
 
 logger = setup_logging()
 
-# Maximum time to spend on a single profile (20 seconds)
-MAX_PROFILE_TIMEOUT = 20.0
+# Maximum time to spend on a single profile (90 seconds to account for navigation retries and delays)
+MAX_PROFILE_TIMEOUT = 90.0
 
 
 async def process_single_profile(

@@ -105,7 +105,7 @@ CONNECT_BUTTON_SELECTOR = 'button:has-text("Connect")'
 MAX_PAGES = _get_env_int("LINKEDIN_MAX_PAGES", 100, min_value=1)
 
 # Random actions - Anti-detection (can be overridden via environment variables)
-RANDOM_ACTION_PROBABILITY = _get_env_float("LINKEDIN_RANDOM_ACTION_PROBABILITY", 0.3, min_value=0.0)
+RANDOM_ACTION_PROBABILITY = _get_env_float("LINKEDIN_RANDOM_ACTION_PROBABILITY", 0.4, min_value=0.0)
 
 # Validate that min delays are <= max delays
 if EXTRACTION_DELAY_MIN > EXTRACTION_DELAY_MAX:

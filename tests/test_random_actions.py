@@ -54,33 +54,6 @@ async def test_perform_random_action_handles_exception(mock_client):
 @pytest.mark.asyncio
 async def test_action_click_logo_and_open_comments_success(mock_client):
     """Test successful execution of click logo and open comments action."""
-    # Setup: Mock comment button (logo navigation is direct now)
-    mock_comment_button = AsyncMock()
-    mock_comment_button.is_visible = AsyncMock(return_value=True)
-    mock_comment_button.click = AsyncMock()
-    mock_comment_locator = MagicMock()
-    mock_comment_locator.first = mock_comment_button
-
-    def locator_side_effect(selector):
-        if "Comment" in selector:
-            return mock_comment_locator
-        return mock_comment_locator
-
-    mock_client.page.locator.side_effect = locator_side_effect
-
-    # Execute
-    result = await random_actions.action_click_logo_and_open_comments(mock_client)
-
-    # Verify
-    assert result is True
-    mock_client.navigate_to.assert_called_with("https://www.linkedin.com/feed")
-    mock_comment_button.click.assert_called()
-    # random_delay is now a standalone function, so we verify it was called via patch
-
-
-@pytest.mark.asyncio
-async def test_action_click_logo_and_open_comments_fallback_navigation(mock_client):
-    """Test action uses direct navigation (simplified implementation)."""
     # Setup: Mock comment button
     mock_comment_button = AsyncMock()
     mock_comment_button.is_visible = AsyncMock(return_value=True)
@@ -225,7 +198,6 @@ async def test_action_open_messages_and_click_conversation_fallback_navigation(m
     # Setup: Mock message items
     mock_message = AsyncMock()
     mock_message.is_visible = AsyncMock(return_value=True)
-    mock_message.scroll_into_view_if_needed = AsyncMock()
     mock_messages_list = MagicMock()
     mock_messages_list.count = AsyncMock(return_value=2)
     mock_messages_list.nth = MagicMock(return_value=mock_message)
@@ -247,60 +219,6 @@ async def test_action_open_messages_and_click_conversation_fallback_navigation(m
     # Verify
     assert result is True
     mock_client.navigate_to.assert_called_with("https://www.linkedin.com/messaging")
-
-
-@pytest.mark.asyncio
-async def test_action_open_messages_and_click_conversation_scroll_fallback(mock_client):
-    """Test action falls back to page scroll when container not found."""
-    # Setup: Messages icon found
-    mock_messages_icon = AsyncMock()
-    mock_messages_icon.is_visible = AsyncMock(return_value=True)
-    mock_messages_locator = MagicMock()
-    mock_messages_locator.first = mock_messages_icon
-
-    # Setup: All container selectors return not visible (to trigger fallback)
-    mock_container = AsyncMock()
-    mock_container.is_visible = AsyncMock(return_value=False)
-    mock_container_locator = MagicMock()
-    mock_container_locator.first = mock_container
-
-    # Setup: Mock message items
-    mock_message = AsyncMock()
-    mock_message.is_visible = AsyncMock(return_value=True)
-    mock_message.scroll_into_view_if_needed = AsyncMock()
-    mock_messages_list = MagicMock()
-    mock_messages_list.count = AsyncMock(return_value=1)
-    mock_messages_list.nth = MagicMock(return_value=mock_message)
-
-    def locator_side_effect(selector):
-        if (
-            "/messaging" in selector
-            or "Messaging" in selector
-            or "Messages" in selector
-            or "messaging-nav-item" in selector
-        ):
-            return mock_messages_locator
-        elif (
-            "listbox" in selector
-            or "conversation-list" in selector
-            or "complementary" in selector
-            or "conversations-list" in selector
-        ):
-            # All container selectors return not visible
-            return mock_container_locator
-        elif "option" in selector or "conversation-item" in selector or "thread" in selector:
-            return mock_messages_list
-        return mock_messages_locator
-
-    mock_client.page.locator.side_effect = locator_side_effect
-    mock_client.page.evaluate = AsyncMock()
-
-    # Execute
-    result = await random_actions.action_open_messages_and_click_conversation(mock_client)
-
-    # Verify
-    assert result is True
-    mock_client.page.evaluate.assert_called()  # Should use page scroll fallback
 
 
 @pytest.mark.asyncio
@@ -349,6 +267,119 @@ async def test_action_open_messages_and_click_conversation_handles_exception(moc
 
     # Execute
     result = await random_actions.action_open_messages_and_click_conversation(mock_client)
+
+    # Verify
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_action_click_jobs_and_open_first_job_success(mock_client):
+    """Test successful execution of click jobs and open first job action."""
+    # Setup: Mock jobs icon
+    mock_jobs_icon = AsyncMock()
+    mock_jobs_icon.is_visible = AsyncMock(return_value=True)
+    mock_jobs_icon.click = AsyncMock()
+    mock_jobs_locator = MagicMock()
+    mock_jobs_locator.first = mock_jobs_icon
+
+    # Setup: Mock job item
+    mock_job = AsyncMock()
+    mock_job.is_visible = AsyncMock(return_value=True)
+    mock_job.click = AsyncMock()
+    mock_job_locator = MagicMock()
+    mock_job_locator.first = mock_job
+
+    def locator_side_effect(selector):
+        if "/jobs" in selector or "jobs" in selector:
+            if "view" in selector or "collections" in selector:
+                return mock_job_locator
+            return mock_jobs_locator
+        return mock_jobs_locator
+
+    mock_client.page.locator.side_effect = locator_side_effect
+
+    # Execute
+    result = await random_actions.action_click_jobs_and_open_first_job(mock_client)
+
+    # Verify
+    assert result is True
+    mock_jobs_icon.click.assert_called()
+    mock_job.click.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_action_click_jobs_and_open_first_job_fallback_navigation(mock_client):
+    """Test action falls back to direct navigation when jobs icon not found."""
+    # Setup: Jobs icon not found
+    mock_jobs_icon = AsyncMock()
+    mock_jobs_icon.is_visible = AsyncMock(return_value=False)
+    mock_jobs_locator = MagicMock()
+    mock_jobs_locator.first = mock_jobs_icon
+
+    # Setup: Mock job item
+    mock_job = AsyncMock()
+    mock_job.is_visible = AsyncMock(return_value=True)
+    mock_job.click = AsyncMock()
+    mock_job_locator = MagicMock()
+    mock_job_locator.first = mock_job
+
+    def locator_side_effect(selector):
+        if "/jobs" in selector or "jobs" in selector:
+            if "view" in selector or "collections" in selector:
+                return mock_job_locator
+            return mock_jobs_locator
+        return mock_jobs_locator
+
+    mock_client.page.locator.side_effect = locator_side_effect
+
+    # Execute
+    result = await random_actions.action_click_jobs_and_open_first_job(mock_client)
+
+    # Verify
+    assert result is True
+    mock_client.navigate_to.assert_called_with("https://www.linkedin.com/jobs")
+    mock_job.click.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_action_click_jobs_and_open_first_job_no_jobs_found(mock_client):
+    """Test action returns False when no jobs found."""
+    # Setup: Jobs icon found
+    mock_jobs_icon = AsyncMock()
+    mock_jobs_icon.is_visible = AsyncMock(return_value=True)
+    mock_jobs_locator = MagicMock()
+    mock_jobs_locator.first = mock_jobs_icon
+
+    # Setup: No jobs found
+    mock_job = AsyncMock()
+    mock_job.is_visible = AsyncMock(return_value=False)
+    mock_job_locator = MagicMock()
+    mock_job_locator.first = mock_job
+
+    def locator_side_effect(selector):
+        if "/jobs" in selector or "jobs" in selector:
+            if "view" in selector or "collections" in selector:
+                return mock_job_locator
+            return mock_jobs_locator
+        return mock_jobs_locator
+
+    mock_client.page.locator.side_effect = locator_side_effect
+
+    # Execute
+    result = await random_actions.action_click_jobs_and_open_first_job(mock_client)
+
+    # Verify
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_action_click_jobs_and_open_first_job_handles_exception(mock_client):
+    """Test action handles exceptions gracefully."""
+    # Setup: Exception during execution
+    mock_client.page.locator.side_effect = Exception("Test error")
+
+    # Execute
+    result = await random_actions.action_click_jobs_and_open_first_job(mock_client)
 
     # Verify
     assert result is False

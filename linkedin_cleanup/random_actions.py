@@ -111,10 +111,39 @@ async def action_open_messages_and_click_conversation(client: "LinkedInClient") 
         return False
 
 
+async def action_click_jobs_and_open_first_job(client: "LinkedInClient") -> bool:
+    """Click jobs menu item and open the first job by clicking on its title."""
+    page = client.page
+    try:
+        jobs_selectors = ['a[href*="/jobs"]', 'nav a[href*="/jobs"]']
+        if not await _try_click_element(page, jobs_selectors, timeout=3000):
+            await client.navigate_to("https://www.linkedin.com/jobs")
+
+        await random_delay()
+
+        job_selectors = ['a[href*="/jobs/view/"]', 'a[href*="/jobs/collections/"]']
+        for selector in job_selectors:
+            try:
+                job = page.locator(selector).first
+                if await job.is_visible(timeout=3000):
+                    await job.click()
+                    await random_delay()
+                    return True
+            except (PlaywrightTimeoutError, AttributeError):
+                continue
+
+        return False
+
+    except Exception as e:
+        logger.debug(f"Error in action_click_jobs_and_open_first_job: {e}")
+        return False
+
+
 # List of available random actions
 AVAILABLE_ACTIONS: list[Callable[["LinkedInClient"], Awaitable[bool]]] = [
     action_click_logo_and_open_comments,
     action_open_messages_and_click_conversation,
+    action_click_jobs_and_open_first_job,
 ]
 
 
