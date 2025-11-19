@@ -33,23 +33,22 @@ async def process_single_profile(
 ) -> tuple[str, str]:
     """Process a single profile connection removal."""
     remover = ConnectionRemover(client)
-    status = await remover.check_connection_status(url)
+    status, success, message = await remover.process_connection_removal(url, dry_run=dry_run)
 
     match status:
         case ConnectionStatus.NOT_CONNECTED:
             update_connection_status(
-                url, ConnectionStatus.NOT_CONNECTED, "Already not connected", timestamp
+                url, ConnectionStatus.NOT_CONNECTED, message, timestamp
             )
-            return "skipped", "Already not connected"
+            return "skipped", message
 
         case ConnectionStatus.UNKNOWN:
             update_connection_status(
-                url, ConnectionStatus.FAILED, "Could not determine connection status", timestamp
+                url, ConnectionStatus.FAILED, message, timestamp
             )
-            return "failed", "Could not determine connection status"
+            return "failed", message
 
         case ConnectionStatus.CONNECTED:
-            success, message = await remover.disconnect_connection(url, dry_run=dry_run)
             if not dry_run:
                 db_status = ConnectionStatus.SUCCESS if success else ConnectionStatus.FAILED
                 update_connection_status(url, db_status, message, timestamp)
@@ -57,9 +56,9 @@ async def process_single_profile(
 
         case _:
             update_connection_status(
-                url, ConnectionStatus.FAILED, f"Unknown status: {status}", timestamp
+                url, ConnectionStatus.FAILED, message, timestamp
             )
-            return "failed", f"Unknown status: {status}"
+            return "failed", message
 
 
 async def run_cleanup(dry_run: bool = False, num_profiles: int = None):
@@ -193,11 +192,12 @@ async def main():
         try:
             async with setup_linkedin_client() as client:
                 remover = ConnectionRemover(client)
-                status = await remover.check_connection_status(args.url)
+                status, success, message = await remover.process_connection_removal(
+                    args.url, dry_run=args.dry_run
+                )
                 logger.info(f"Connection Status: {status.value}")
 
                 if status == ConnectionStatus.CONNECTED:
-                    success, message = await remover.disconnect_connection(args.url, args.dry_run)
                     result = "✅ SUCCESS" if success else "❌ FAILED"
                     print_banner(f"Result: {result}")
                     logger.info(f"Message: {message}")
@@ -209,9 +209,9 @@ async def main():
                     elif success and args.dry_run:
                         logger.info("All selectors working correctly!")
                 elif status == ConnectionStatus.NOT_CONNECTED:
-                    logger.info("Already not connected - no action needed.")
+                    logger.info(message)
                 else:
-                    logger.warning("Could not determine connection status.")
+                    logger.warning(message)
         except LinkedInClientError as e:
             logger.error(f"LinkedIn client error: {e}")
             return

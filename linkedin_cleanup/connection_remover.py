@@ -45,38 +45,24 @@ class ConnectionRemover:
             pass
         return None
 
-    async def check_connection_status(self, url: str) -> ConnectionStatus:
-        """Check if we are connected to a profile. Returns ConnectionStatus enum."""
-        page = self.client.page
-        try:
-            await self.client.navigate_to(url)
-
-            if await self._find_more_button():
-                return ConnectionStatus.CONNECTED
-
-            try:
-                connect_button = page.locator(config.CONNECT_BUTTON_SELECTOR).first
-                if await connect_button.is_visible(timeout=config.SHORT_SELECTOR_TIMEOUT):
-                    if "Connect" in await connect_button.inner_text():
-                        return ConnectionStatus.NOT_CONNECTED
-            except (PlaywrightTimeoutError, AttributeError):
-                pass
-
-            return ConnectionStatus.UNKNOWN
-
-        except Exception as e:
-            logger.debug(f"Error checking connection status: {e}")
-            return ConnectionStatus.UNKNOWN
-
-    async def disconnect_connection(self, url: str, dry_run: bool = False) -> tuple[bool, str]:
-        """Disconnect from a LinkedIn connection. Returns (success, message)."""
+    async def process_connection_removal(
+        self, url: str, dry_run: bool = False
+    ) -> tuple[ConnectionStatus, bool, str]:
+        """Process connection removal with single navigation. Returns (status, success, message)."""
         page = self.client.page
         try:
             await self.client.navigate_to(url)
 
             more_button = await self._find_more_button()
             if not more_button:
-                return False, "Could not find 'More' button"
+                try:
+                    connect_button = page.locator(config.CONNECT_BUTTON_SELECTOR).first
+                    if await connect_button.is_visible(timeout=config.SHORT_SELECTOR_TIMEOUT):
+                        if "Connect" in await connect_button.inner_text():
+                            return ConnectionStatus.NOT_CONNECTED, False, "Already not connected"
+                except (PlaywrightTimeoutError, AttributeError):
+                    pass
+                return ConnectionStatus.UNKNOWN, False, "Could not determine connection status"
 
             await self.client.human_like_click(more_button)
 
@@ -93,11 +79,11 @@ class ConnectionRemover:
             if not remove_option:
                 await page.keyboard.press("Escape")
                 await random_delay()
-                return False, "Could not find 'Remove connection' option"
+                return ConnectionStatus.CONNECTED, False, "Could not find 'Remove connection' option"
 
             if dry_run:
                 await page.keyboard.press("Escape")
-                return True, "[DRY RUN] Successfully found all selectors - would remove connection"
+                return ConnectionStatus.CONNECTED, True, "[DRY RUN] Successfully found all selectors - would remove connection"
 
             await remove_option.scroll_into_view_if_needed()
 
@@ -108,24 +94,27 @@ class ConnectionRemover:
 
             await random_delay()
             await self.client.close_new_tabs(keep_url_pattern="linkedin.com/in/")
-            await self.client.navigate_to(url)
+
+            for selector in config.MORE_BUTTON_SELECTORS:
+                try:
+                    button = page.locator(selector).first
+                    await button.wait_for(state="hidden", timeout=config.VERIFICATION_TIMEOUT)
+                except PlaywrightTimeoutError:
+                    pass
 
             connect_button = page.locator(config.CONNECT_BUTTON_SELECTOR).first
-            connect_visible = await connect_button.is_visible(timeout=config.VERIFICATION_TIMEOUT)
-
-            more_button_after = await self._find_more_button()
-
-            if connect_visible:
+            if await connect_button.is_visible(timeout=config.VERIFICATION_TIMEOUT):
                 try:
                     if "Connect" in await connect_button.inner_text():
-                        return True, "Successfully removed"
+                        return ConnectionStatus.CONNECTED, True, "Successfully removed"
                 except (PlaywrightTimeoutError, AttributeError):
                     pass
 
-            if not more_button_after:
-                return True, "Successfully removed"
+            if not await self._find_more_button():
+                return ConnectionStatus.CONNECTED, True, "Successfully removed"
 
-            return False, "Removal verification failed"
+            return ConnectionStatus.CONNECTED, False, "Removal verification failed"
 
         except Exception as e:
-            return False, f"Error: {str(e)}"
+            logger.debug(f"Error processing connection removal: {e}")
+            return ConnectionStatus.UNKNOWN, False, f"Error: {str(e)}"
