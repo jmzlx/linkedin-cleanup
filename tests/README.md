@@ -36,6 +36,8 @@ pytest -v
 ### 4. Utilities (`test_utils.py`)
 - URL normalization
 - Profile name cleaning
+- Timeout behavior (terminates on timeout)
+- Client setup error handling (login failure and cleanup)
 
 ## Test Philosophy
 

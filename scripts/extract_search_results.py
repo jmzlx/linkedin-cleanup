@@ -10,18 +10,15 @@ from typing import List, Set, Tuple
 import pandas as pd
 
 from linkedin_cleanup import config
-from linkedin_cleanup.linkedin_client import LinkedInClient
 from linkedin_cleanup import search_extractor
+from linkedin_cleanup.utils import LinkedInClientError, print_banner, setup_linkedin_client, with_timeout
+
+# Maximum time to spend on a single page (30 seconds)
+MAX_PAGE_TIMEOUT = 30.0
 
 
-def _print_banner(title: str):
-    """Print a formatted banner."""
-    print(f"\n{'='*80}")
-    print(title)
-    print(f"{'='*80}\n")
-
-
-async def extract_all_profiles(client: LinkedInClient, search_url: str, max_pages: int = None) -> List[Tuple[str, str, str]]:
+async def extract_all_profiles(client, search_url: str, max_pages: int = None) -> List[Tuple[str, str, str]]:
+    # client: LinkedInClient (avoid circular import)
     """Extract all profiles from search results, handling pagination.
     Returns list of (name, url, location) tuples.
     Deduplicates within a single run by URL.
@@ -50,10 +47,15 @@ async def extract_all_profiles(client: LinkedInClient, search_url: str, max_page
         print(f"📄 PAGE {page_num}")
         print(f"{'='*60}")
         
-        # Extract profiles from current page
-        page_profiles = await search_extractor.extract_profiles_from_page(client)
-        
-        if not page_profiles:
+        # Extract profiles from current page with timeout
+        page_profiles = await with_timeout(
+            search_extractor.extract_profiles_from_page(client),
+            MAX_PAGE_TIMEOUT,
+            "Page extraction"
+        )
+        if page_profiles is None or not page_profiles:
+            if page_profiles is None:
+                break  # Timeout
             print(f"\n⚠ No profiles found on page {page_num}. Stopping extraction.")
             break
         
@@ -80,15 +82,17 @@ async def extract_all_profiles(client: LinkedInClient, search_url: str, max_page
             print(f"\n⚠ Reached page limit ({page_limit}). Stopping extraction.")
             break
         
-        # Check for next page
-        print(f"\n🔍 Checking for next page...")
-        if not await search_extractor.has_next_page(client):
+        # Try to go to next page (go_to_next_page already checks if button is enabled)
+        print(f"\n🔍 Attempting to navigate to next page...")
+        success = await with_timeout(
+            search_extractor.go_to_next_page(client),
+            MAX_PAGE_TIMEOUT,
+            "Next page navigation"
+        )
+        if success is None or not success:
+            if success is None:
+                break  # Timeout
             print("✓ No more pages available. Extraction complete.")
-            break
-        
-        # Go to next page
-        if not await search_extractor.go_to_next_page(client):
-            print("⚠ Could not navigate to next page. Stopping extraction.")
             break
         
         page_num += 1
@@ -105,7 +109,7 @@ async def run_extraction(search_url: str, output_csv: str = None, dry_run: bool 
         dry_run: If True, don't save to CSV, just print results
         max_pages: Maximum number of pages to extract
     """
-    _print_banner("LINKEDIN SEARCH RESULTS EXTRACTOR")
+    print_banner("LINKEDIN SEARCH RESULTS EXTRACTOR")
     
     print(f"🔗 Search URL: {search_url}")
     if dry_run:
@@ -116,55 +120,40 @@ async def run_extraction(search_url: str, output_csv: str = None, dry_run: bool 
         print(f"📄 Max pages: {max_pages}")
     print()
     
-    client = LinkedInClient()
-    
-    # Setup browser
-    print("🌐 Setting up browser...")
-    await client.setup_browser()
-    print("✓ Browser ready\n")
-    
     try:
-        # Ensure logged in
-        print("🔐 Checking login status...")
-        if not await client.ensure_logged_in():
-            print("✗ Failed to log in. Exiting.")
-            return
-        print("✓ Logged in successfully\n")
-        
-        # Extract all profiles
-        print("🚀 Starting profile extraction...")
-        all_profiles = await extract_all_profiles(client, search_url, max_pages=max_pages)
-        
-        # Print all profiles to terminal
-        print(f"\n{'='*80}")
-        print(f"📋 EXTRACTED PROFILES ({len(all_profiles)} total)")
-        print(f"{'='*80}")
-        for idx, (name, url, location) in enumerate(all_profiles, 1):
-            print(f"{idx:4d}. {name:40s} | {location:30s} | {url}")
-        print(f"{'='*80}\n")
-        
-        if not dry_run:
-            # Save to CSV using pandas
-            print(f"💾 Saving {len(all_profiles)} profiles to CSV...")
-            df = pd.DataFrame(all_profiles, columns=['Name', 'URL', 'Location'])
-            output_path = Path(output_csv)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            df.to_csv(output_path, index=False)
-            print(f"✓ Saved to: {output_csv}")
-        else:
-            print(f"🧪 DRY RUN: Skipping CSV save")
-        
-        _print_banner("EXTRACTION COMPLETE!")
-        print(f"✅ Total profiles extracted: {len(all_profiles)}")
-        if not dry_run:
-            print(f"📁 CSV saved to: {output_csv}")
-        else:
-            print(f"🧪 DRY RUN: No file saved")
-    
-    finally:
-        print("\n🔒 Closing browser...")
-        await client.close()
-        print("✓ Browser closed")
+        async with setup_linkedin_client() as client:
+            # Extract all profiles
+            print("🚀 Starting profile extraction...")
+            all_profiles = await extract_all_profiles(client, search_url, max_pages=max_pages)
+            
+            # Print all profiles to terminal
+            print(f"\n{'='*80}")
+            print(f"📋 EXTRACTED PROFILES ({len(all_profiles)} total)")
+            print(f"{'='*80}")
+            for idx, (name, url, location) in enumerate(all_profiles, 1):
+                print(f"{idx:4d}. {name:40s} | {location:30s} | {url}")
+            print(f"{'='*80}\n")
+            
+            if not dry_run:
+                # Save to CSV using pandas
+                print(f"💾 Saving {len(all_profiles)} profiles to CSV...")
+                df = pd.DataFrame(all_profiles, columns=['Name', 'URL', 'Location'])
+                output_path = Path(output_csv)
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                df.to_csv(output_path, index=False)
+                print(f"✓ Saved to: {output_csv}")
+            else:
+                print(f"🧪 DRY RUN: Skipping CSV save")
+            
+            print_banner("EXTRACTION COMPLETE!")
+            print(f"✅ Total profiles extracted: {len(all_profiles)}")
+            if not dry_run:
+                print(f"📁 CSV saved to: {output_csv}")
+            else:
+                print(f"🧪 DRY RUN: No file saved")
+    except LinkedInClientError as e:
+        print(f"\n❌ {e}")
+        return
 
 
 async def main():

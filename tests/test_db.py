@@ -56,7 +56,7 @@ def test_update_and_get_connection_status(temp_db):
 
 
 def test_get_pending_urls(temp_db):
-    """Test getting pending URLs."""
+    """Test getting pending URLs (includes both pending and failed for retry)."""
     # Add some URLs with different statuses
     update_connection_status("https://www.linkedin.com/in/pending1", "pending")
     update_connection_status("https://www.linkedin.com/in/pending2", "pending")
@@ -66,12 +66,12 @@ def test_get_pending_urls(temp_db):
     # Get pending URLs (filter out the __init__ entry from fixture)
     pending = [url for url in get_pending_urls() if url != "__init__"]
     
-    # Verify
-    assert len(pending) == 2
+    # Verify: get_pending_urls returns both pending and failed (for retry)
+    assert len(pending) == 3
     assert "https://www.linkedin.com/in/pending1" in pending
     assert "https://www.linkedin.com/in/pending2" in pending
-    assert "https://www.linkedin.com/in/success1" not in pending
-    assert "https://www.linkedin.com/in/failed1" not in pending
+    assert "https://www.linkedin.com/in/failed1" in pending  # Failed URLs are included for retry
+    assert "https://www.linkedin.com/in/success1" not in pending  # Success should not be included
 
 
 def test_get_all_connections(temp_db):
