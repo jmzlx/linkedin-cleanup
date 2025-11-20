@@ -105,6 +105,8 @@ async def run_cleanup(dry_run: bool = False, num_profiles: int = None):
                             timestamp,
                         )
 
+                    await perform_random_action(client)
+
                     try:
                         result = await with_timeout(
                             process_single_profile(client, url, dry_run, timestamp),
@@ -145,7 +147,6 @@ async def run_cleanup(dry_run: bool = False, num_profiles: int = None):
                         pbar.set_postfix(status="error", success=success_count, failed=failed_count)
                         logger.exception(f"Error processing {url}: {e}")
 
-                    await perform_random_action(client)
                     if idx < len(remaining):
                         await random_delay()
 

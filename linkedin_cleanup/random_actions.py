@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import random
+import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
@@ -139,11 +140,33 @@ async def action_click_jobs_and_open_first_job(client: "LinkedInClient") -> bool
         return False
 
 
+async def action_scroll_feed(client: "LinkedInClient") -> bool:
+    """Navigate to home feed and slowly scroll down for a random time between 10 and 20 seconds."""
+    page = client.page
+    try:
+        await client.navigate_to(config.LINKEDIN_FEED_URL)
+        await random_delay()
+
+        scroll_duration = random.uniform(10.0, 20.0)
+        start_time = time.time()
+
+        while (time.time() - start_time) < scroll_duration:
+            await page.evaluate(f"window.scrollBy(0, {random.randint(100, 400)})")
+            await asyncio.sleep(random.uniform(2.0, 4.0))
+
+        return True
+
+    except Exception as e:
+        logger.debug(f"Error in action_scroll_feed: {e}")
+        return False
+
+
 # List of available random actions
 AVAILABLE_ACTIONS: list[Callable[["LinkedInClient"], Awaitable[bool]]] = [
     action_click_logo_and_open_comments,
     action_open_messages_and_click_conversation,
     action_click_jobs_and_open_first_job,
+    action_scroll_feed,
 ]
 
 
